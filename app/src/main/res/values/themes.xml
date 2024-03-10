@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="Theme.AlertCar" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.SignUpScreen" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/purple_200</item>
+    </style>
+    <style name="Theme.SignInScreen" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/teal_200</item>
+    </style>
+</resources>
