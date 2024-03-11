@@ -19,6 +19,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import androidx.room.Room
 import com.ItInfraApp.AlertCar.BuildConfig
 import com.ItInfraApp.AlertCar.R
 import com.ItInfraApp.AlertCar.controller.MultiplePermissionHandler
@@ -53,10 +54,13 @@ class MainActivity : ComponentActivity() {
         .setMatchMode(ScanSettings.MATCH_MODE_STICKY)
         .build()
 
-    private val deviceNameToFilter = "MS1089"
-    private val scanFilters = ScanFilter.Builder()
-        .setDeviceName(deviceNameToFilter)
-        .build()
+    private val deviceAddressFilter = listOf("FC:45:C3:A3:09:6A", "FF:FF:70:80:0D:95")
+
+    private val scanFilters = deviceAddressFilter.map { address ->
+        ScanFilter.Builder()
+            .setDeviceAddress(address)
+            .build()
+    }.toMutableList()
 
     // Device scan Callback
     private val scanCallback: ScanCallback = object : ScanCallback() {
@@ -80,6 +84,7 @@ class MainActivity : ComponentActivity() {
             Timber.e("BLE Scan failed with error code: $errorCode")
         }
     }
+
 
     // On create function
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -140,11 +145,8 @@ class MainActivity : ComponentActivity() {
                 topBar = {
                     CenterAlignedTopAppBar(
                         title = {
-                            Text(text = "BLE Devices Nearby")
-                        },
-                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                            titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                            Text(text = "AlertCar")
+                        }
                     )
                 }
             ) {
@@ -197,8 +199,7 @@ class MainActivity : ComponentActivity() {
                             onClick = {
                                 isScanning = Scanning.scanBleDevices(
                                     bluetoothLeScanner = bluetoothLeScanner,
-                                    //scanFilters = listOf(scanFilters),
-                                    null,
+                                    scanFilters = scanFilters,
                                     scanSettings = scanSettings,
                                     scanCallback = scanCallback,
                                     scanning = isScanning
