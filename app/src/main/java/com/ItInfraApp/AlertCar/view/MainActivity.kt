@@ -54,7 +54,7 @@ class MainActivity : ComponentActivity() {
         .setMatchMode(ScanSettings.MATCH_MODE_STICKY)
         .build()
 
-    private val deviceAddressFilter = listOf("FC:45:C3:A3:09:6A", "FF:FF:70:80:0D:95")
+    private val deviceAddressFilter = listOf("FC:45:C3:A3:09:6A", "FF:FF:70:80:0D:95", "DC:B5:4F:0F:73:AE")
 
     private val scanFilters = deviceAddressFilter.map { address ->
         ScanFilter.Builder()
