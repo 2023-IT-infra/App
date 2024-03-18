@@ -12,4 +12,8 @@ class SharedViewModel : ViewModel() {
     fun updateScanResults(results: List<ScanResult>) {
         _scanResults.value = results
     }
+
+    fun clearScanResults() {
+        _scanResults.value = emptyList()
+    }
 }

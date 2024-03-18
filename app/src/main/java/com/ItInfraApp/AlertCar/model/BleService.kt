@@ -39,8 +39,6 @@ class BleService: Service() {
     // Scanning
     private val bluetoothLeScanner: BluetoothLeScanner by lazy { bluetoothAdapter?.bluetoothLeScanner!! }
 
-    private val scanResults = mutableStateListOf<ScanResult>()
-
     // Define Scan Settings
     private val scanSettings = ScanSettings.Builder()
         .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
@@ -51,19 +49,23 @@ class BleService: Service() {
 
     private val scanFilters = deviceAddressFilter.map { address ->
         ScanFilter.Builder()
-            //.setDeviceAddress(address)
+            .setDeviceAddress(address)
             .build()
     }.toMutableList()
+
+    private val scanResults = mutableListOf<ScanResult>()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Action Received: ${intent?.action}")
 
         when (intent?.action) {
             "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE" -> {
+                Log.d(TAG, "Received Start Foreground Intent")
                 startForegroundService()
                 startScanning()
             }
             "com.ItInfraApp.AlertCar.ACTION_STOP_FOREGROUND_SERVICE" -> {
+                Log.d(TAG, "Received Stop Foreground Intent")
                 stopForegroundService()
                 stopScanning()
             }
@@ -137,9 +139,9 @@ class BleService: Service() {
         sendBroadcast(intent)
     }
 
-    private fun updateBleScanResult(scanResults: List<ScanResult>) {
+    private fun updateBleScanResult() {
         val intent = Intent(Actions.ACTION_DEVICE_DATA_CHANGED)
-        intent.putParcelableArrayListExtra("scan_results", ArrayList(scanResults))
+        intent.putParcelableArrayListExtra("scan_results", scanResults as ArrayList<ScanResult>)
         sendBroadcast(intent)
     }
 
@@ -149,36 +151,24 @@ class BleService: Service() {
                 Manifest.permission.BLUETOOTH_SCAN
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
-            return
+            bluetoothLeScanner.startScan(scanFilters, scanSettings, scanCallback)
+            Log.d(TAG, "BLE scan started.")
         }
-        bluetoothLeScanner.startScan(scanFilters, scanSettings, scanCallback)
         Log.d(TAG, "BLE scan started.")
     }
 
     private fun stopScanning() {
+
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.BLUETOOTH_SCAN
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
-            return
+            bluetoothLeScanner.stopScan(scanCallback)
+            Log.d(TAG, "BLE scan stopped.")
         }
-        bluetoothLeScanner.stopScan(scanCallback)
         Log.d(TAG, "BLE scan stopped.")
+
     }
 
     // Device scan Callback
@@ -187,9 +177,16 @@ class BleService: Service() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             Timber.d("onScanResult: $result")
-            if (!scanResults.contains(result)) {
-                updateBleScanResult(result)
+            val indexQuery = scanResults.indexOfFirst { it.device.address == result.device.address }
+            if (indexQuery != -1) { // A scan result already exists with the same address
+                scanResults[indexQuery] = result
+            } else {
+                with(result.device) {
+                    Timber.d("Found BLE device! Name: ${name ?: "Unnamed"}, address: $address")
+                }
+                scanResults.add(result)
             }
+            updateBleScanResult()
         }
 
         override fun onScanFailed(errorCode: Int) {
@@ -197,6 +194,9 @@ class BleService: Service() {
             Timber.e("BLE Scan failed with error code: $errorCode")
             updateFailedScanResult( errorCode)
         }
+
+
     }
+
 
 }

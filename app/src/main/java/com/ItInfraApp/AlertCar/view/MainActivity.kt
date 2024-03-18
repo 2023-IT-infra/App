@@ -18,6 +18,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -47,8 +48,6 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var bleIntent: Intent
 
-    private val scanResults = mutableListOf<ScanResult>()
-
     // Create Multiple Permission Handler to handle all the required permissions
     private val multiplePermissionHandler: MultiplePermissionHandler by lazy {
         MultiplePermissionHandler(this, this)
@@ -61,12 +60,6 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         startBleForegroundService()
-
-        viewModel.scanResults.observe(this) { results ->
-            // 스캔 결과를 UI에 업데이트
-            // 예: DeviceList Composable 함수에 결과 업데이트
-            updateDeviceList(results)
-        }
 
         // init Timber
         if (BuildConfig.DEBUG) {
@@ -104,8 +97,8 @@ class MainActivity : ComponentActivity() {
 
     private val updateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            val results = intent.getParcelableArrayListExtra<ScanResult>("scan_results")
-            viewModel.updateScanResults(results ?: listOf())
+            val results = intent.getParcelableArrayListExtra<ScanResult>("scan_results")?.let { ArrayList(it) } ?: arrayListOf()
+            viewModel.updateScanResults(results)
         }
     }
 
@@ -120,12 +113,6 @@ class MainActivity : ComponentActivity() {
         // Start the BLE Foreground Service
         bleIntent = Intent(this, BleService::class.java)
         ContextCompat.startForegroundService(this, bleIntent)
-    }
-
-    // Update the Device List
-    private fun updateDeviceList(results: List<ScanResult>) {
-        scanResults.clear()
-        scanResults.addAll(results)
     }
 
     override fun onDestroy() {
@@ -182,7 +169,7 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxWidth(),
 
                                 ) {
-                                DeviceList(scanResults)
+                                DeviceList(viewModel = viewModel)
                             }
                         }
                     }
@@ -196,7 +183,7 @@ class MainActivity : ComponentActivity() {
                         Button(
                             modifier = Modifier
                                 .padding(top = 8.dp, bottom = 24.dp),
-                            onClick = { scanResults.clear() },
+                            onClick = { viewModel.clearScanResults() },
                             content = {
                                 Text("Clear Results")
                             }
@@ -210,7 +197,7 @@ class MainActivity : ComponentActivity() {
                                     // 서비스 시작
                                     val startIntent = Intent(context, BleService::class.java)
                                     startIntent.action = "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE"
-                                    ContextCompat.startForegroundService(context, startIntent)
+                                    context.startForegroundService(startIntent)
                                 } else {
                                     // 서비스 정지
                                     val stopIntent = Intent(context, BleService::class.java)
