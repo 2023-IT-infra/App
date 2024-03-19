@@ -6,7 +6,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 
 class SharedViewModel : ViewModel() {
-    private val _scanResults = MutableLiveData<List<ScanResult>>()
+    private val _scanResults = MutableLiveData<List<ScanResult>>(emptyList())
     val scanResults: LiveData<List<ScanResult>> = _scanResults
 
     fun updateScanResults(results: List<ScanResult>) {
@@ -16,4 +16,6 @@ class SharedViewModel : ViewModel() {
     fun clearScanResults() {
         _scanResults.value = emptyList()
     }
+
+
 }

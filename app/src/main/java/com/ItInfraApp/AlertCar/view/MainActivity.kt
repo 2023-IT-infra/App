@@ -27,22 +27,26 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ViewModelProvider
 import com.ItInfraApp.AlertCar.BuildConfig
 import com.ItInfraApp.AlertCar.R
 import com.ItInfraApp.AlertCar.controller.MultiplePermissionHandler
 import com.ItInfraApp.AlertCar.controller.Scanning
 import com.ItInfraApp.AlertCar.model.Actions
 import com.ItInfraApp.AlertCar.model.BleService
+import com.ItInfraApp.AlertCar.model.DeviceModel
 import com.ItInfraApp.AlertCar.model.SharedViewModel
 import com.ItInfraApp.AlertCar.view.composables.DeviceList
 import com.ItInfraApp.AlertCar.view.composables.ScanButton
+import com.ItInfraApp.AlertCar.view.theme.AlertCarTheme
 import com.ItInfraApp.AlertCar.view.theme.BLEScannerTheme
 import kotlinx.coroutines.delay
 import timber.log.Timber
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: SharedViewModel by viewModels()
+    private lateinit var viewModel: SharedViewModel
 
     private lateinit var bluetoothAdapter: BluetoothAdapter
 
@@ -58,7 +62,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-
+        viewModel = ViewModelProvider(this)[SharedViewModel::class.java]
         startBleForegroundService()
 
         // init Timber
@@ -75,7 +79,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    ScanningScreen()
+                    ScanningScreen(viewModel)
                 }
             }
         }
@@ -123,7 +127,7 @@ class MainActivity : ComponentActivity() {
     // Scanning Screen Composable
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun ScanningScreen() {
+    fun ScanningScreen(viewModel: SharedViewModel) {
         val context = LocalContext.current
         var isScanning: Boolean by remember { mutableStateOf(false) }
 
@@ -201,7 +205,6 @@ class MainActivity : ComponentActivity() {
                                 } else {
                                     // 서비스 정지
                                     val stopIntent = Intent(context, BleService::class.java)
-                                    stopIntent.action = "com.ItInfraApp.AlertCar.ACTION_STOP_FOREGROUND_SERVICE"
                                     context.stopService(stopIntent)
                                 }
                             }
@@ -216,13 +219,21 @@ class MainActivity : ComponentActivity() {
     @Preview(showBackground = true)
     @Composable
     fun DefaultPreview() {
-        BLEScannerTheme {
-            ScanningScreen()
+        val dummyScanResults = SharedViewModel()
+//        BLEScannerTheme {
+//            ScanningScreen(dummyScanResults)
+//        }
+        AlertCarTheme {
+            BeaconAlarmMainScreen(dummyScanResults)
         }
     }
 
     @Composable
-    fun BeaconAlarmMainScreen() {
+    fun BeaconAlarmMainScreen(viewModel: SharedViewModel) {
+
+        val context = LocalContext.current
+        var isScanning: Boolean by remember { mutableStateOf(false) }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -235,7 +246,7 @@ class MainActivity : ComponentActivity() {
             Spacer(modifier = Modifier.height(10.dp))
 
             // 비콘 상태 표시
-            BeaconStatus()
+            BeaconStatus(viewModel)
 
             Divider(Modifier.padding(vertical = 10.dp))
 
@@ -246,14 +257,50 @@ class MainActivity : ComponentActivity() {
 
             // 최근 알람 이력
             RecentAlarms()
+
+            // Bottom Row containing two buttons
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                // Clear Results Button
+                Button(
+                    modifier = Modifier
+                        .padding(top = 8.dp, bottom = 24.dp),
+                    onClick = { viewModel.clearScanResults() },
+                    content = {
+                        Text("Clear Results")
+                    }
+                )
+                // Start/Stop Scanning Button
+                ScanButton(
+                    scanning = isScanning,
+                    onClick = {
+                        isScanning = !isScanning
+                        if (isScanning) {
+                            // 서비스 시작
+                            val startIntent = Intent(context, BleService::class.java)
+                            startIntent.action = "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE"
+                            context.startForegroundService(startIntent)
+                        } else {
+                            // 서비스 정지
+                            val stopIntent = Intent(context, BleService::class.java)
+                            context.stopService(stopIntent)
+                        }
+                    }
+                )
+            }
         }
     }
 
     @Composable
-    fun BeaconStatus() {
+    fun BeaconStatus(viewModel: SharedViewModel) {
         // 비콘 상태를 표시하는 코드
         Text("rssi:")
         // 추가 비콘 상태 정보...
+
+        DeviceList(viewModel = viewModel)
     }
 
     @Composable

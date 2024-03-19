@@ -15,13 +15,18 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.input.key.Key.Companion.Notification
+import androidx.compose.ui.text.font.FontVariation
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.ItInfraApp.AlertCar.view.MainActivity
 import timber.log.Timber
 class BleService: Service() {
@@ -55,6 +60,7 @@ class BleService: Service() {
 
     private val scanResults = mutableListOf<ScanResult>()
 
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Action Received: ${intent?.action}")
 
@@ -64,22 +70,13 @@ class BleService: Service() {
                 startForegroundService()
                 startScanning()
             }
-            "com.ItInfraApp.AlertCar.ACTION_STOP_FOREGROUND_SERVICE" -> {
-                Log.d(TAG, "Received Stop Foreground Intent")
-                stopForegroundService()
-                stopScanning()
-            }
+
         }
         return START_NOT_STICKY
     }
 
     private fun startForegroundService() {
         startForeground()
-    }
-
-    private fun stopForegroundService() {
-        stopForeground(true)
-        stopSelf()
     }
 
     /**
@@ -101,6 +98,7 @@ class BleService: Service() {
 
     private fun startForeground() {
         createNotificationChannel()
+
         val notification = NotificationCompat.Builder(this, "BLE")
             .setContentTitle("BLE Service")
             .setContentText("BLE Service is running")
@@ -117,8 +115,22 @@ class BleService: Service() {
                 "BLE Service Channel",
                 NotificationManager.IMPORTANCE_DEFAULT
             )
+
+            val alertChannel = NotificationChannel(
+                "Alert",
+                "Alert Channel",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alert Channel"
+                vibrationPattern = longArrayOf(0, 1000, 500, 1000, 500, 1000, 500, 1000, 500, 1000)
+                setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build())
+            }
+
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
+            manager.createNotificationChannel(alertChannel)
+
+
         }
     }
 
@@ -129,6 +141,9 @@ class BleService: Service() {
 
     override fun onDestroy() {
         Log.d(TAG, "onDestroy called")
+        stopScanning()
+        scanResults.clear()
+        updateBleScanResult()
         super.onDestroy()
     }
 
@@ -179,12 +194,30 @@ class BleService: Service() {
             Timber.d("onScanResult: $result")
             val indexQuery = scanResults.indexOfFirst { it.device.address == result.device.address }
             if (indexQuery != -1) { // A scan result already exists with the same address
+
                 scanResults[indexQuery] = result
             } else {
                 with(result.device) {
                     Timber.d("Found BLE device! Name: ${name ?: "Unnamed"}, address: $address")
                 }
                 scanResults.add(result)
+            }
+
+            for (device in scanResults) {
+                Log.d(TAG, "Device: ${device.device.name} - ${device.device.address} - ${device.rssi}")
+                if(device.rssi> -60) {
+                    val notification = NotificationCompat.Builder(this@BleService, "Alert")
+                        .setContentTitle("BLE Device Alert")
+                        .setContentText("BLE Device is in range")
+                        .setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setPriority(NotificationCompat.PRIORITY_HIGH)
+                        .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000, 500, 1000, 500, 1000))
+                        .build()
+
+                    with(NotificationManagerCompat.from(this@BleService)) {
+                        notify(device.advertisingSid, notification)
+                    }
+                }
             }
             updateBleScanResult()
         }
