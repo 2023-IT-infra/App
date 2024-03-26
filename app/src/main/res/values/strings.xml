@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">My Application</string>
+    <string name="app_name">AlertCar</string>
     // 회원 가입
     <string name="sign_up">회원 가입</string>
     <string name="sign_up_name">이름</string>

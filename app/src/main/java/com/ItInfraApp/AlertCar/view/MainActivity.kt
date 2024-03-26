@@ -1,8 +1,6 @@
 package com.ItInfraApp.AlertCar.view
 
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothManager
 import android.bluetooth.le.*
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -12,13 +10,11 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -27,21 +23,22 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModelProvider
+import androidx.room.Room
 import com.ItInfraApp.AlertCar.BuildConfig
 import com.ItInfraApp.AlertCar.R
 import com.ItInfraApp.AlertCar.controller.MultiplePermissionHandler
-import com.ItInfraApp.AlertCar.controller.Scanning
 import com.ItInfraApp.AlertCar.model.Actions
+import com.ItInfraApp.AlertCar.model.ApiService
 import com.ItInfraApp.AlertCar.model.BleService
-import com.ItInfraApp.AlertCar.model.DeviceModel
 import com.ItInfraApp.AlertCar.model.SharedViewModel
 import com.ItInfraApp.AlertCar.view.composables.DeviceList
 import com.ItInfraApp.AlertCar.view.composables.ScanButton
 import com.ItInfraApp.AlertCar.view.theme.AlertCarTheme
 import com.ItInfraApp.AlertCar.view.theme.BLEScannerTheme
 import kotlinx.coroutines.delay
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import timber.log.Timber
 
 class MainActivity : ComponentActivity() {
@@ -51,6 +48,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var bluetoothAdapter: BluetoothAdapter
 
     private lateinit var bleIntent: Intent
+
+
 
     // Create Multiple Permission Handler to handle all the required permissions
     private val multiplePermissionHandler: MultiplePermissionHandler by lazy {

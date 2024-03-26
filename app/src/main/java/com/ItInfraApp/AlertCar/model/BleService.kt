@@ -21,19 +21,29 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.ui.input.key.Key.Companion.Notification
-import androidx.compose.ui.text.font.FontVariation
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.ItInfraApp.AlertCar.view.MainActivity
+import androidx.room.Room
+import com.ItInfraApp.AlertCar.entity.BluetoothDevice
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import timber.log.Timber
+import java.util.concurrent.TimeUnit
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.HttpsURLConnection
+
 class BleService: Service() {
     // Binder given to clients (notice class declaration below)
     private val mBinder: IBinder = LocalBinder()
 
     private val TAG = "BleService"
+
 
     // lazy load bluetoothAdapter and bluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? by lazy(LazyThreadSafetyMode.NONE) {
@@ -50,13 +60,66 @@ class BleService: Service() {
         .setMatchMode(ScanSettings.MATCH_MODE_STICKY)
         .build()
 
-    private val deviceAddressFilter = listOf("FC:45:C3:A3:09:6A", "FF:FF:70:80:0D:95", "DC:B5:4F:0F:73:AE")
+    val logging = HttpLoggingInterceptor().apply {
+        level = HttpLoggingInterceptor.Level.BODY
+    }
 
-    private val scanFilters = deviceAddressFilter.map { address ->
-        ScanFilter.Builder()
-            .setDeviceAddress(address)
+    val hostnameVerifier = HostnameVerifier { hostname, session ->
+        if (hostname == "svr.kiwiwip.duckdns.org") true else HttpsURLConnection.getDefaultHostnameVerifier().verify(hostname, session)
+    }
+
+    private fun fetchAndStartScan() {
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://svr.kiwiwip.duckdns.org/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .client(
+                OkHttpClient.Builder()
+                    .addInterceptor(logging)
+                    .hostnameVerifier(hostnameVerifier)
+                    .build()
+            )
             .build()
-    }.toMutableList()
+
+        val apiService = retrofit.create(ApiService::class.java)
+
+        Log.d(TAG, "Fetching devices from server.")
+        apiService.getAllDevices().enqueue(
+            object : Callback<List<BluetoothDevice>> {
+                override fun onResponse(call: Call<List<BluetoothDevice>>, response: Response<List<BluetoothDevice>>) {
+                    Log.d(TAG, "Response: $response")
+                    if (response.isSuccessful) {
+                        // 서버로부터 가져온 MAC 주소 리스트
+                        val devices = response.body() ?: emptyList()
+                        Log.d(TAG, "Devices: $devices")
+                        // 필터 리스트 생성
+                        val scanFilters = devices.mapNotNull { device ->
+
+                            if (device.mac.isNotEmpty()) {
+                                ScanFilter.Builder().setDeviceAddress(device.mac).build()
+                            } else {
+                                null
+                            }
+                        }
+
+                        // 가져온 필터를 바탕으로 스캔 시작
+                        startScanning(scanFilters)
+                    } else {
+                        // 에러 처리
+                        Timber.e("Failed to fetch devices from server. Error code: ${response.code()}")
+                    }
+                }
+
+                override fun onFailure(call: Call<List<BluetoothDevice>>, t: Throwable) {
+                    // 에러 처리
+                    Timber.e(t, "Failed to fetch devices from server.")
+                }
+            }
+        )
+    }
+
+
+    //private val deviceAddressFilter = listOf("FC:45:C3:A3:09:6A", "FF:FF:70:80:0D:95", "DC:B5:4F:0F:73:AE")
+
 
     private val scanResults = mutableListOf<ScanResult>()
 
@@ -68,7 +131,6 @@ class BleService: Service() {
             "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE" -> {
                 Log.d(TAG, "Received Start Foreground Intent")
                 startForegroundService()
-                startScanning()
             }
 
         }
@@ -76,6 +138,7 @@ class BleService: Service() {
     }
 
     private fun startForegroundService() {
+        fetchAndStartScan()
         startForeground()
     }
 
@@ -160,7 +223,7 @@ class BleService: Service() {
         sendBroadcast(intent)
     }
 
-    private fun startScanning() {
+    private fun startScanning(scanFilters: List<ScanFilter>) {
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.BLUETOOTH_SCAN
