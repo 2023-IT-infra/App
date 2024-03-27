@@ -78,6 +78,7 @@ class MultiplePermissionHandler(
                     .show()
             }
         }
+
     }
 
     private val multiplePermissionResultLauncher by lazy(LazyThreadSafetyMode.NONE) {
