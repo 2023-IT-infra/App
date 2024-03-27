@@ -60,26 +60,7 @@ fun DeviceCard(deviceModel: DeviceModel) {
                         text = "${deviceModel.rssi} dBm",
                         style = MaterialTheme.typography.bodySmall
                     )
-                    Text(
-                        text = ScanResultAdapter.getBondState(deviceModel.bondState),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Text(
-                        text = "AD Flags: ${deviceModel.advertiseFlags}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    for (pair in deviceModel.parsedBytes){
-                        Text(
-                            modifier = Modifier.padding(top = 5.dp, bottom = 5.dp),
-                            text = "${pair.first}\nValue:  ${pair.second}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Divider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface)
-                    }
-                    Text(
-                        text = "RAW Data: ${deviceModel.rawDataBytes.toHex()}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    
                 }
             }
         }

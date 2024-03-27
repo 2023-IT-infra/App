@@ -63,6 +63,18 @@ class PermissionHandler (private val activity: ComponentActivity, private val co
         }
     }
 
+    private val requestInternetPermissionLauncher by lazy(LazyThreadSafetyMode.NONE) {
+        activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                Toast.makeText(context, "Internet permission granted", Toast.LENGTH_SHORT)
+                    .show()
+            } else {
+                Toast.makeText(context, "Internet permission denied", Toast.LENGTH_SHORT)
+                    .show()
+            }
+        }
+    }
+
     /**
      * Checks the BLE-related permissions and requests them if necessary.
      *
@@ -96,6 +108,14 @@ class PermissionHandler (private val activity: ComponentActivity, private val co
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             requestBluetoothScanPermissionLauncher.launch(Manifest.permission.BLUETOOTH_SCAN)
+        }
+
+        if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.INTERNET
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestInternetPermissionLauncher.launch(Manifest.permission.INTERNET)
         }
 
         if (ContextCompat.checkSelfPermission(

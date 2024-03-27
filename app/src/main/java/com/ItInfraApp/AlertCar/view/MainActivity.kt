@@ -1,90 +1,68 @@
 package com.ItInfraApp.AlertCar.view
 
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothManager
 import android.bluetooth.le.*
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.ViewModelProvider
+import androidx.room.Room
 import com.ItInfraApp.AlertCar.BuildConfig
 import com.ItInfraApp.AlertCar.R
 import com.ItInfraApp.AlertCar.controller.MultiplePermissionHandler
-import com.ItInfraApp.AlertCar.controller.Scanning
+import com.ItInfraApp.AlertCar.model.Actions
+import com.ItInfraApp.AlertCar.model.ApiService
+import com.ItInfraApp.AlertCar.model.BleService
+import com.ItInfraApp.AlertCar.model.SharedViewModel
 import com.ItInfraApp.AlertCar.view.composables.DeviceList
 import com.ItInfraApp.AlertCar.view.composables.ScanButton
+import com.ItInfraApp.AlertCar.view.theme.AlertCarTheme
 import com.ItInfraApp.AlertCar.view.theme.BLEScannerTheme
 import kotlinx.coroutines.delay
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import timber.log.Timber
 
 class MainActivity : ComponentActivity() {
 
-    // lazy load bluetoothAdapter and bluetoothManager
-    private val bluetoothAdapter: BluetoothAdapter? by lazy(LazyThreadSafetyMode.NONE) {
-        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        bluetoothManager.adapter
-    }
+    private lateinit var viewModel: SharedViewModel
+
+    private lateinit var bluetoothAdapter: BluetoothAdapter
+
+    private lateinit var bleIntent: Intent
+
+
 
     // Create Multiple Permission Handler to handle all the required permissions
     private val multiplePermissionHandler: MultiplePermissionHandler by lazy {
         MultiplePermissionHandler(this, this)
     }
 
-    // Scanning
-    private val bluetoothLeScanner: BluetoothLeScanner by lazy { bluetoothAdapter?.bluetoothLeScanner!! }
-
-    private val scanResults = mutableStateListOf<ScanResult>()
-
-    // Define Scan Settings
-    private val scanSettings = ScanSettings.Builder()
-        .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
-        .setMatchMode(ScanSettings.MATCH_MODE_STICKY)
-        .build()
-
-    private val deviceNameToFilter = "MS1089"
-    private val scanFilters = ScanFilter.Builder()
-        .setDeviceName(deviceNameToFilter)
-        .build()
-
-    // Device scan Callback
-    private val scanCallback: ScanCallback = object : ScanCallback() {
-
-        @SuppressLint("MissingPermission")
-        override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val indexQuery = scanResults.indexOfFirst { it.device.address == result.device.address }
-            if (indexQuery != -1) { // A scan result already exists with the same address
-                scanResults[indexQuery] = result
-            } else {
-                with(result.device) {
-                    Timber.d("Found BLE device! Name: ${name ?: "Unnamed"}, address: $address")
-                }
-                scanResults.add(result)
-
-            }
-        }
-
-        override fun onScanFailed(errorCode: Int) {
-            super.onScanFailed(errorCode)
-            Timber.e("BLE Scan failed with error code: $errorCode")
-        }
-    }
-
     // On create function
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        viewModel = ViewModelProvider(this)[SharedViewModel::class.java]
+        startBleForegroundService()
 
         // init Timber
         if (BuildConfig.DEBUG) {
@@ -100,31 +78,56 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    ScanningScreen()
+                    ScanningScreen(viewModel)
                 }
             }
         }
 
         Timber.d("Content Set...")
 
+        registerReceiver(updateReceiver, IntentFilter(Actions.ACTION_DEVICE_DATA_CHANGED),
+            RECEIVER_NOT_EXPORTED
+        )
+
         try {
             entry()
         } catch (e: Exception) {
             Timber.tag(e.toString())
         }
+
+
     }
 
+    private val updateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val results = intent.getParcelableArrayListExtra<ScanResult>("scan_results")?.let { ArrayList(it) } ?: arrayListOf()
+            viewModel.updateScanResults(results)
+        }
+    }
 
     // Entry point for permission checks
     private fun entry() {
+        // Check for BLE Permissions
+        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
         multiplePermissionHandler.checkBlePermissions(bluetoothAdapter)
     }
 
+    private fun startBleForegroundService() {
+        // Start the BLE Foreground Service
+        bleIntent = Intent(this, BleService::class.java)
+        ContextCompat.startForegroundService(this, bleIntent)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(updateReceiver)
+    }
 
     // Scanning Screen Composable
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun ScanningScreen() {
+    fun ScanningScreen(viewModel: SharedViewModel) {
+        val context = LocalContext.current
         var isScanning: Boolean by remember { mutableStateOf(false) }
 
         Surface(
@@ -140,11 +143,8 @@ class MainActivity : ComponentActivity() {
                 topBar = {
                     CenterAlignedTopAppBar(
                         title = {
-                            Text(text = "BLE Devices Nearby")
-                        },
-                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                            titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                            Text(text = "AlertCar")
+                        }
                     )
                 }
             ) {
@@ -172,7 +172,7 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxWidth(),
 
                                 ) {
-                                DeviceList(scanResults)
+                                DeviceList(viewModel = viewModel)
                             }
                         }
                     }
@@ -186,23 +186,26 @@ class MainActivity : ComponentActivity() {
                         Button(
                             modifier = Modifier
                                 .padding(top = 8.dp, bottom = 24.dp),
-                            onClick = { scanResults.clear() },
+                            onClick = { viewModel.clearScanResults() },
                             content = {
                                 Text("Clear Results")
                             }
                         )
                         // Start/Stop Scanning Button
                         ScanButton(
-                            isScanning,
+                            scanning = isScanning,
                             onClick = {
-                                isScanning = Scanning.scanBleDevices(
-                                    bluetoothLeScanner = bluetoothLeScanner,
-                                    //scanFilters = listOf(scanFilters),
-                                    null,
-                                    scanSettings = scanSettings,
-                                    scanCallback = scanCallback,
-                                    scanning = isScanning
-                                )
+                                isScanning = !isScanning
+                                if (isScanning) {
+                                    // 서비스 시작
+                                    val startIntent = Intent(context, BleService::class.java)
+                                    startIntent.action = "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE"
+                                    context.startForegroundService(startIntent)
+                                } else {
+                                    // 서비스 정지
+                                    val stopIntent = Intent(context, BleService::class.java)
+                                    context.stopService(stopIntent)
+                                }
                             }
                         )
                     }
@@ -215,13 +218,21 @@ class MainActivity : ComponentActivity() {
     @Preview(showBackground = true)
     @Composable
     fun DefaultPreview() {
-        BLEScannerTheme {
-            ScanningScreen()
+        val dummyScanResults = SharedViewModel()
+//        BLEScannerTheme {
+//            ScanningScreen(dummyScanResults)
+//        }
+        AlertCarTheme {
+            BeaconAlarmMainScreen(dummyScanResults)
         }
     }
 
     @Composable
-    fun BeaconAlarmMainScreen() {
+    fun BeaconAlarmMainScreen(viewModel: SharedViewModel) {
+
+        val context = LocalContext.current
+        var isScanning: Boolean by remember { mutableStateOf(false) }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -234,7 +245,7 @@ class MainActivity : ComponentActivity() {
             Spacer(modifier = Modifier.height(10.dp))
 
             // 비콘 상태 표시
-            BeaconStatus()
+            BeaconStatus(viewModel)
 
             Divider(Modifier.padding(vertical = 10.dp))
 
@@ -245,14 +256,50 @@ class MainActivity : ComponentActivity() {
 
             // 최근 알람 이력
             RecentAlarms()
+
+            // Bottom Row containing two buttons
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                // Clear Results Button
+                Button(
+                    modifier = Modifier
+                        .padding(top = 8.dp, bottom = 24.dp),
+                    onClick = { viewModel.clearScanResults() },
+                    content = {
+                        Text("Clear Results")
+                    }
+                )
+                // Start/Stop Scanning Button
+                ScanButton(
+                    scanning = isScanning,
+                    onClick = {
+                        isScanning = !isScanning
+                        if (isScanning) {
+                            // 서비스 시작
+                            val startIntent = Intent(context, BleService::class.java)
+                            startIntent.action = "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE"
+                            context.startForegroundService(startIntent)
+                        } else {
+                            // 서비스 정지
+                            val stopIntent = Intent(context, BleService::class.java)
+                            context.stopService(stopIntent)
+                        }
+                    }
+                )
+            }
         }
     }
 
     @Composable
-    fun BeaconStatus() {
+    fun BeaconStatus(viewModel: SharedViewModel) {
         // 비콘 상태를 표시하는 코드
         Text("rssi:")
         // 추가 비콘 상태 정보...
+
+        DeviceList(viewModel = viewModel)
     }
 
     @Composable
