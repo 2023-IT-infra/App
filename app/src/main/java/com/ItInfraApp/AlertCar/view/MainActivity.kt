@@ -17,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -36,6 +37,13 @@ import com.ItInfraApp.AlertCar.view.composables.DeviceList
 import com.ItInfraApp.AlertCar.view.composables.ScanButton
 import com.ItInfraApp.AlertCar.view.theme.AlertCarTheme
 import com.ItInfraApp.AlertCar.view.theme.BLEScannerTheme
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieClipSpec
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.animateLottieCompositionAsState
+import com.airbnb.lottie.compose.rememberLottieAnimatable
+import com.airbnb.lottie.compose.rememberLottieComposition
 import kotlinx.coroutines.delay
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -130,6 +138,19 @@ class MainActivity : ComponentActivity() {
         val context = LocalContext.current
         var isScanning: Boolean by remember { mutableStateOf(false) }
 
+        val compositions by rememberLottieComposition(
+            LottieCompositionSpec.RawRes(R.raw.power_button)
+        )
+        val lottieAnimatable = rememberLottieAnimatable()
+
+        LaunchedEffect(key1 = (compositions)) {
+            lottieAnimatable.animate(
+                compositions,
+                clipSpec = LottieClipSpec.Frame(0, 1200)
+            )
+
+        }
+
         Surface(
             modifier = Modifier
                 .fillMaxSize()
@@ -209,6 +230,13 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     }
+
+                    // lottie 애니메이션 추가
+                    LottieAnimation(
+                        composition = compositions,
+                        progress = lottieAnimatable.progress,
+                        contentScale = ContentScale.FillWidth
+                    )
                 }
             }
         }
@@ -231,6 +259,16 @@ class MainActivity : ComponentActivity() {
     fun BeaconAlarmMainScreen(viewModel: SharedViewModel) {
 
         val context = LocalContext.current
+        val compositions by rememberLottieComposition(
+            LottieCompositionSpec.RawRes(R.raw.power_button)
+        )
+        val progress by animateLottieCompositionAsState(
+            compositions,
+            isPlaying = true,
+            clipSpec = LottieClipSpec.Frame(0, 42),
+            iterations = LottieConstants.IterateForever,
+            restartOnPlay = false
+        )
         var isScanning: Boolean by remember { mutableStateOf(false) }
 
         Column(
@@ -257,39 +295,30 @@ class MainActivity : ComponentActivity() {
             // 최근 알람 이력
             RecentAlarms()
 
-            // Bottom Row containing two buttons
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                // Clear Results Button
-                Button(
-                    modifier = Modifier
-                        .padding(top = 8.dp, bottom = 24.dp),
-                    onClick = { viewModel.clearScanResults() },
-                    content = {
-                        Text("Clear Results")
+            // lottie 애니메이션 추가
+            LottieAnimation(
+                composition = compositions,
+                progress = progress,
+                contentScale = ContentScale.FillWidth
+            )
+
+            // Start/Stop Scanning Button
+            ScanButton(
+                scanning = isScanning,
+                onClick = {
+                    isScanning = !isScanning
+                    if (isScanning) {
+                        // 서비스 시작
+                        val startIntent = Intent(context, BleService::class.java)
+                        startIntent.action = "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE"
+                        context.startForegroundService(startIntent)
+                    } else {
+                        // 서비스 정지
+                        val stopIntent = Intent(context, BleService::class.java)
+                        context.stopService(stopIntent)
                     }
-                )
-                // Start/Stop Scanning Button
-                ScanButton(
-                    scanning = isScanning,
-                    onClick = {
-                        isScanning = !isScanning
-                        if (isScanning) {
-                            // 서비스 시작
-                            val startIntent = Intent(context, BleService::class.java)
-                            startIntent.action = "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE"
-                            context.startForegroundService(startIntent)
-                        } else {
-                            // 서비스 정지
-                            val stopIntent = Intent(context, BleService::class.java)
-                            context.stopService(stopIntent)
-                        }
-                    }
-                )
-            }
+                }
+            )
         }
     }
 

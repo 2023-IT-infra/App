@@ -268,7 +268,7 @@ class BleService: Service() {
 
             for (device in scanResults) {
                 Log.d(TAG, "Device: ${device.device.name} - ${device.device.address} - ${device.rssi}")
-                if(device.rssi> -60) {
+                if(device.rssi> -80) {
                     val notification = NotificationCompat.Builder(this@BleService, "Alert")
                         .setContentTitle("BLE Device Alert")
                         .setContentText("BLE Device is in range")
