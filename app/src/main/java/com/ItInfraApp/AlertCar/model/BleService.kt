@@ -12,10 +12,12 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
+import android.net.Uri
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -24,7 +26,7 @@ import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.room.Room
+import com.ItInfraApp.AlertCar.R
 import com.ItInfraApp.AlertCar.entity.BluetoothDevice
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -34,7 +36,6 @@ import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import timber.log.Timber
-import java.util.concurrent.TimeUnit
 import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.HttpsURLConnection
 
@@ -163,9 +164,9 @@ class BleService: Service() {
         createNotificationChannel()
 
         val notification = NotificationCompat.Builder(this, "BLE")
-            .setContentTitle("BLE Service")
-            .setContentText("BLE Service is running")
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("ALERT CAR SYSTEM RUNNING")
+            .setContentText("Scanning around for Car")
+            .setSmallIcon(R.drawable.line_md__bell_alert_loop)
             .build()
 
         startForeground(1, notification)
@@ -186,7 +187,7 @@ class BleService: Service() {
             ).apply {
                 description = "Alert Channel"
                 vibrationPattern = longArrayOf(0, 1000, 500, 1000, 500, 1000, 500, 1000, 500, 1000)
-                setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build())
+                setSound(Settings.System.DEFAULT_ALARM_ALERT_URI, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
             }
 
             val manager = getSystemService(NotificationManager::class.java)
@@ -270,11 +271,10 @@ class BleService: Service() {
                 Log.d(TAG, "Device: ${device.device.name} - ${device.device.address} - ${device.rssi}")
                 if(device.rssi> -80) {
                     val notification = NotificationCompat.Builder(this@BleService, "Alert")
-                        .setContentTitle("BLE Device Alert")
-                        .setContentText("BLE Device is in range")
-                        .setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setContentTitle("Car Alert!")
+                        .setContentText("Car is near you!")
+                        .setSmallIcon(R.drawable.mdi__truck_alert_outline)
                         .setPriority(NotificationCompat.PRIORITY_HIGH)
-                        .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000, 500, 1000, 500, 1000))
                         .build()
 
                     with(NotificationManagerCompat.from(this@BleService)) {
