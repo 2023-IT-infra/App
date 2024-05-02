@@ -43,6 +43,7 @@ import com.ItInfraApp.AlertCar.R
 import com.ItInfraApp.AlertCar.controller.MultiplePermissionHandler
 import com.ItInfraApp.AlertCar.model.Actions
 import com.ItInfraApp.AlertCar.model.BleService
+import com.ItInfraApp.AlertCar.model.FilteredScanResult
 import com.ItInfraApp.AlertCar.model.SharedViewModel
 import com.ItInfraApp.AlertCar.view.composables.DeviceList
 import com.ItInfraApp.AlertCar.view.composables.ScanButton
@@ -117,7 +118,7 @@ class MainActivity : ComponentActivity() {
 
     private val updateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            val results = intent.getParcelableArrayListExtra<ScanResult>("scan_results")?.let { ArrayList(it) } ?: arrayListOf()
+            val results = intent.getParcelableArrayListExtra<FilteredScanResult>("scan_results")?.let { ArrayList(it) } ?: arrayListOf()
             viewModel.updateScanResults(results)
         }
     }
@@ -282,6 +283,8 @@ class MainActivity : ComponentActivity() {
             // 필요에 따라 다른 스타일의 폰트도 추가할 수 있습니다.
         )
 
+        var isButtonEnabled by remember { mutableStateOf(true) }
+
         var isPlaying by remember { mutableStateOf(false) }
 
         var currentAnimation by remember { mutableStateOf(R.raw.power_button) }
@@ -377,22 +380,29 @@ class MainActivity : ComponentActivity() {
                             interactionSource = interactionSource,
                             indication = null, // 클릭 시 리플 효과 제거
                             onClick = {
-                                isScanning = !isScanning
-                                if (isScanning) {
-                                    if(!isMyServiceRunning(BleService::class.java)) {
-                                        // 서비스 시작
-                                        val startIntent = Intent(context, BleService::class.java)
-                                        startIntent.action = "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE"
-                                        context.startForegroundService(startIntent)
+                                if (isButtonEnabled) {
+                                    isButtonEnabled = false // 버튼 비활성화
+                                    isScanning = !isScanning
+
+                                    if (isScanning) {
+                                        if (!isMyServiceRunning(BleService::class.java)) {
+                                            // 서비스 시작
+                                            val startIntent = Intent(context, BleService::class.java)
+                                            startIntent.action = "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE"
+                                            context.startForegroundService(startIntent)
+                                        }
+                                        currentAnimation = R.raw.power_button_on
+                                        isPlaying = true
+                                    } else {
+                                        // 서비스 정지
+                                        val stopIntent = Intent(context, BleService::class.java)
+                                        context.stopService(stopIntent)
+                                        currentAnimation = R.raw.power_button
+                                        isPlaying = false
                                     }
-                                    currentAnimation = R.raw.power_button_on
-                                    isPlaying = true
-                                } else {
-                                    // 서비스 정지
-                                    val stopIntent = Intent(context, BleService::class.java)
-                                    context.stopService(stopIntent)
-                                    currentAnimation = R.raw.power_button
-                                    isPlaying = false
+
+                                    // 버튼을 다시 활성화
+                                    isButtonEnabled = true
                                 }
                             }
                         ).size(400.dp)
@@ -407,6 +417,7 @@ class MainActivity : ComponentActivity() {
     fun BeaconStatus(viewModel: SharedViewModel) {
 
         val scanResults = viewModel.scanResults.observeAsState(initial = emptyList())
+        val resultRssi = viewModel.scanResults.value?.firstOrNull()?.filteredRssi ?: 0
 
 
 
@@ -424,7 +435,7 @@ class MainActivity : ComponentActivity() {
                     .padding(start = 24.dp, end = 24.dp)
             )
         } else {
-            val rssi = scanResults.value[0].rssi
+            val rssi = resultRssi
             // 리스트가 비어 있지 않을 때의 처리 로직
             // 비콘 상태를 표시하는 코드
             Text("rssi: $rssi dBm",

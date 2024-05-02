@@ -1,5 +1,6 @@
 package com.ItInfraApp.AlertCar.model
 
+import KalmanFilter
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
@@ -12,15 +13,16 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
-import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
-import android.net.Uri
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.ActivityCompat
@@ -45,6 +47,10 @@ class BleService: Service() {
 
     private val TAG = "BleService"
 
+    // KalmanFilter 객체 생성
+    val kalmanFilters = mutableListOf<KalmanFilter>()
+
+    val vibrator: Vibrator by lazy { getSystemService(Context.VIBRATOR_SERVICE) as Vibrator }
 
     // lazy load bluetoothAdapter and bluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? by lazy(LazyThreadSafetyMode.NONE) {
@@ -55,10 +61,11 @@ class BleService: Service() {
     // Scanning
     private val bluetoothLeScanner: BluetoothLeScanner by lazy { bluetoothAdapter?.bluetoothLeScanner!! }
 
+
     // Define Scan Settings
     private val scanSettings = ScanSettings.Builder()
-        .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
-        .setMatchMode(ScanSettings.MATCH_MODE_STICKY)
+        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+        .setMatchMode(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
         .build()
 
     val logging = HttpLoggingInterceptor().apply {
@@ -122,7 +129,7 @@ class BleService: Service() {
     //private val deviceAddressFilter = listOf("FC:45:C3:A3:09:6A", "FF:FF:70:80:0D:95", "DC:B5:4F:0F:73:AE")
 
 
-    private val scanResults = mutableListOf<ScanResult>()
+    private val filteredScanResults = mutableListOf<FilteredScanResult>()
 
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -186,7 +193,7 @@ class BleService: Service() {
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Alert Channel"
-                vibrationPattern = longArrayOf(0, 1000, 500, 1000, 500, 1000, 500, 1000, 500, 1000)
+
                 setSound(Settings.System.DEFAULT_ALARM_ALERT_URI, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
             }
 
@@ -206,7 +213,8 @@ class BleService: Service() {
     override fun onDestroy() {
         Log.d(TAG, "onDestroy called")
         stopScanning()
-        scanResults.clear()
+        kalmanFilters.clear()
+        filteredScanResults.clear()
         updateBleScanResult()
         super.onDestroy()
     }
@@ -220,7 +228,7 @@ class BleService: Service() {
 
     private fun updateBleScanResult() {
         val intent = Intent(Actions.ACTION_DEVICE_DATA_CHANGED)
-        intent.putParcelableArrayListExtra("scan_results", scanResults as ArrayList<ScanResult>)
+        intent.putParcelableArrayListExtra("scan_results", filteredScanResults as ArrayList<FilteredScanResult>)
         sendBroadcast(intent)
     }
 
@@ -231,7 +239,6 @@ class BleService: Service() {
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             bluetoothLeScanner.startScan(scanFilters, scanSettings, scanCallback)
-            Log.d(TAG, "BLE scan started.")
         }
         Log.d(TAG, "BLE scan started.")
     }
@@ -244,7 +251,6 @@ class BleService: Service() {
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             bluetoothLeScanner.stopScan(scanCallback)
-            Log.d(TAG, "BLE scan stopped.")
         }
         Log.d(TAG, "BLE scan stopped.")
 
@@ -256,31 +262,66 @@ class BleService: Service() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             Timber.d("onScanResult: $result")
-            val indexQuery = scanResults.indexOfFirst { it.device.address == result.device.address }
-            if (indexQuery != -1) { // A scan result already exists with the same address
 
-                scanResults[indexQuery] = result
+            val indexQuery = filteredScanResults.indexOfFirst { it.scanResult.device.address == result.device.address }
+            if (indexQuery != -1) { // A scan result already exists with the same address
+                // Use the corresponding KalmanFilter to filter the RSSI value
+                val filteredRssi = kalmanFilters[indexQuery].filtering(result.rssi.toDouble()).toInt()
+                filteredScanResults[indexQuery] = FilteredScanResult(result, filteredRssi)
             } else {
                 with(result.device) {
                     Timber.d("Found BLE device! Name: ${name ?: "Unnamed"}, address: $address")
                 }
-                scanResults.add(result)
+                // Add a new KalmanFilter for the new device
+                val kalmanFilter = KalmanFilter()
+                val resultRssi = kalmanFilter.filtering(result.rssi.toDouble())
+                kalmanFilters.add(kalmanFilter)
+                // Add the new device result and a new KalmanFilter for it
+                filteredScanResults.add(FilteredScanResult(result, resultRssi.toInt()))
             }
 
-            for (device in scanResults) {
-                Log.d(TAG, "Device: ${device.device.name} - ${device.device.address} - ${device.rssi}")
-                if(device.rssi> -80) {
-                    val notification = NotificationCompat.Builder(this@BleService, "Alert")
-                        .setContentTitle("Car Alert!")
-                        .setContentText("Car is near you!")
-                        .setSmallIcon(R.drawable.mdi__truck_alert_outline)
-                        .setPriority(NotificationCompat.PRIORITY_HIGH)
-                        .build()
+            fun alertNotification(channelId: String, vibratorAmp: Int, index: Int, state: Int) {
+                val message = when (state) {
+                    1 -> "Car is near you!"
+                    2 -> "be careful! Car is near you!"
+                    3 -> "watch out! Car is very near you!"
+                    else -> ""
+                }
 
-                    with(NotificationManagerCompat.from(this@BleService)) {
-                        notify(device.advertisingSid, notification)
+                val notification = NotificationCompat.Builder(this@BleService, channelId)
+                    .setContentTitle("Car Alert!")
+                    .setContentText(message)
+                    .setSmallIcon(R.drawable.mdi__truck_alert_outline)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .build()
+
+                val timings = longArrayOf(100, 200, 100, 200, 100, 200)
+                val amplitudes = intArrayOf(0, vibratorAmp, 0, vibratorAmp, 0, vibratorAmp)
+
+                val effect = VibrationEffect.createWaveform(timings, amplitudes, 0)
+                vibrator.vibrate(effect)
+
+                with(NotificationManagerCompat.from(this@BleService)) {
+                    notify(index, notification)
+                }
+
+            }
+
+            for (device in filteredScanResults) {
+                Log.d(TAG, "Device: ${device.scanResult.device.name} - ${device.scanResult.device.address} - ${device.scanResult.rssi} - ${device.filteredRssi} - ${device.scanResult.txPower}")
+
+                if(device.scanResult.txPower != 127) {
+                    val distance = Math.pow(10.0, ((device.scanResult.txPower - device.filteredRssi) / 20.0))
+                    Log.d(TAG, "Distance: $distance")
+
+                    when {
+                        device.filteredRssi < -90 -> alertNotification("Alert", 50, filteredScanResults.indexOf(device), 1)
+                        device.filteredRssi < -80 -> alertNotification("Alert", 100, filteredScanResults.indexOf(device), 2)
+                        device.filteredRssi < -70 -> alertNotification("Alert", 150, filteredScanResults.indexOf(device), 3)
                     }
                 }
+
+
             }
             updateBleScanResult()
         }
@@ -292,7 +333,11 @@ class BleService: Service() {
         }
 
 
+
+
     }
+
+
 
 
 }
