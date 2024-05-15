@@ -50,6 +50,9 @@ class BleService: Service() {
     // KalmanFilter 객체 생성
     val kalmanFilters = mutableListOf<KalmanFilter>()
 
+    // Retrofit 객체 생성
+    private val client = Client.apiService
+
     val vibrator: Vibrator by lazy { getSystemService(Context.VIBRATOR_SERVICE) as Vibrator }
 
     // lazy load bluetoothAdapter and bluetoothManager
@@ -68,30 +71,11 @@ class BleService: Service() {
         .setMatchMode(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
         .build()
 
-    val logging = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
-    }
-
-    val hostnameVerifier = HostnameVerifier { hostname, session ->
-        if (hostname == "svr.kiwiwip.duckdns.org") true else HttpsURLConnection.getDefaultHostnameVerifier().verify(hostname, session)
-    }
-
     private fun fetchAndStartScan() {
-        val retrofit = Retrofit.Builder()
-            .baseUrl("https://svr.kiwiwip.duckdns.org/")
-            .addConverterFactory(GsonConverterFactory.create())
-            .client(
-                OkHttpClient.Builder()
-                    .addInterceptor(logging)
-                    .hostnameVerifier(hostnameVerifier)
-                    .build()
-            )
-            .build()
 
-        val apiService = retrofit.create(ApiService::class.java)
 
         Log.d(TAG, "Fetching devices from server.")
-        apiService.getAllDevices().enqueue(
+        client.getAllDevices().enqueue(
             object : Callback<List<BluetoothDevice>> {
                 override fun onResponse(call: Call<List<BluetoothDevice>>, response: Response<List<BluetoothDevice>>) {
                     Log.d(TAG, "Response: $response")
@@ -192,8 +176,6 @@ class BleService: Service() {
                 "Alert Channel",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Alert Channel"
-
                 setSound(Settings.System.DEFAULT_ALARM_ALERT_URI, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
             }
 
@@ -310,15 +292,14 @@ class BleService: Service() {
             for (device in filteredScanResults) {
                 Log.d(TAG, "Device: ${device.scanResult.device.name} - ${device.scanResult.device.address} - ${device.scanResult.rssi} - ${device.filteredRssi} - ${device.scanResult.txPower}")
 
-                if(device.scanResult.txPower != 127) {
-                    val distance = Math.pow(10.0, ((device.scanResult.txPower - device.filteredRssi) / 20.0))
-                    Log.d(TAG, "Distance: $distance")
+                Log.d(TAG, "advertisingSid: ${device.scanResult.advertisingSid}")
 
-                    when {
-                        device.filteredRssi < -90 -> alertNotification("Alert", 50, filteredScanResults.indexOf(device), 1)
-                        device.filteredRssi < -80 -> alertNotification("Alert", 100, filteredScanResults.indexOf(device), 2)
-                        device.filteredRssi < -70 -> alertNotification("Alert", 150, filteredScanResults.indexOf(device), 3)
-                    }
+                if(device.filteredRssi > -70) {
+                    alertNotification("Alert", 50, filteredScanResults.indexOf(device), 3)
+                } else if(device.filteredRssi > -80) {
+                    alertNotification("Alert", 100, filteredScanResults.indexOf(device), 2)
+                } else if(device.filteredRssi > -90) {
+                    alertNotification("Alert", 150, filteredScanResults.indexOf(device), 1)
                 }
 
 
