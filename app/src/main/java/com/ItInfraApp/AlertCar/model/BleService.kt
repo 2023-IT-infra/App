@@ -109,12 +109,7 @@ class BleService: Service() {
         )
     }
 
-
-    //private val deviceAddressFilter = listOf("FC:45:C3:A3:09:6A", "FF:FF:70:80:0D:95", "DC:B5:4F:0F:73:AE")
-
-
     private val filteredScanResults = mutableListOf<FilteredScanResult>()
-
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Action Received: ${intent?.action}")

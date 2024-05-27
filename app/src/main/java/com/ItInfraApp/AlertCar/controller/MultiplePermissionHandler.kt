@@ -5,9 +5,13 @@ import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AlertDialog
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import timber.log.Timber
 
@@ -64,6 +68,7 @@ class MultiplePermissionHandler(
             } else {
                 Toast.makeText(context, "Bluetooth Connect permission denied", Toast.LENGTH_SHORT)
                     .show()
+
             }
         }
     }
@@ -109,6 +114,7 @@ class MultiplePermissionHandler(
      * @param bluetoothAdapter The BluetoothAdapter instance.
      */
 
+
     fun checkBlePermissions(bluetoothAdapter: BluetoothAdapter?) {
         Timber.d("Checking permissions...")
 
@@ -120,122 +126,54 @@ class MultiplePermissionHandler(
             this.activity.finish() // TODO() make this more elegant and don't just crash
         }
 
-        val permissionsStateScan: String = if (ContextCompat.checkSelfPermission(
+        val permissionsStateScan = ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.BLUETOOTH_SCAN
             ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            "0"
-        } else "1"
 
-        val permissionsStateConnect = if (ContextCompat.checkSelfPermission(
+
+        val permissionsStateConnect = ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            "0"
-        } else "1"
 
-        val permissionsStateLocation = if (ContextCompat.checkSelfPermission(
+        val permissionsStateLocation = ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.ACCESS_FINE_LOCATION
             ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            "0"
-        } else "1"
+
+        val permissionsBackgroundLocation = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
 
         // Integrate the INTERNET permission check
-         val permissionsStateInternet = if (ContextCompat.checkSelfPermission(
+         val permissionsStateInternet = ContextCompat.checkSelfPermission(
                  context,
                  Manifest.permission.INTERNET
              ) != PackageManager.PERMISSION_GRANTED
-         ) {
-             "0"
-         } else "1"
 
 
-        val permissionsState: String = permissionsStateConnect + permissionsStateScan + permissionsStateLocation + permissionsStateInternet
+        val permissionsState: Map<String, Boolean> = mapOf(
+            Manifest.permission.BLUETOOTH_SCAN to permissionsStateScan,
+            Manifest.permission.BLUETOOTH_CONNECT to permissionsStateConnect,
+            Manifest.permission.ACCESS_FINE_LOCATION to permissionsStateLocation,
+            Manifest.permission.ACCESS_BACKGROUND_LOCATION to permissionsBackgroundLocation,
+            Manifest.permission.INTERNET to permissionsStateInternet
+        )
+
 
         Timber.d("PermissionsState is $permissionsState")
         // _ _ _ -> FINE_LOCATION, BLUETOOTH_SCAN, BLUETOOTH_CONNECT, INTERNET
-        when (permissionsState) {
-            "0000" // No permission granted
-                -> multiplePermissionResultLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.BLUETOOTH_SCAN,
-                        Manifest.permission.BLUETOOTH_CONNECT,
-                        Manifest.permission.INTERNET
-                )
-            )
-            "0001" // No permission granted
-            -> multiplePermissionResultLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.BLUETOOTH_SCAN,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                )
-            )
-            "0010" // Location already granted
-                -> multiplePermissionResultLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.BLUETOOTH_CONNECT,
-                        Manifest.permission.BLUETOOTH_SCAN,
-                        Manifest.permission.INTERNET
-                    )
-                )
-            "0100" // Location already granted
-            -> multiplePermissionResultLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.BLUETOOTH_CONNECT,
-                    Manifest.permission.INTERNET
-                )
-            )
-            "0110" // Location already granted
-            ->{
-                requestBluetoothConnectPermissionLauncher.launch(
-                    Manifest.permission.BLUETOOTH_CONNECT
-                )
-                requestInternetPermissionLauncher.launch(
-                        Manifest.permission.INTERNET
-                )
-            }
-            "1000" // Connect already granted
-                -> multiplePermissionResultLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.BLUETOOTH_SCAN,
-                        Manifest.permission.INTERNET
-                )
-            )
-            "1010" // Connect and Location already granted
-            -> {
-                    requestBluetoothScanPermissionLauncher.launch(
-                        Manifest.permission.BLUETOOTH_SCAN
-                    )
-                    requestInternetPermissionLauncher.launch(
-                        Manifest.permission.INTERNET
-                    )
-            }
 
-            "1100" // Connect and Scan already granted
-            ->
-            {
-                requestFineLocationPermissionLauncher.launch(
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                )
-                requestInternetPermissionLauncher.launch(
-                    Manifest.permission.INTERNET
-                )
-            }
-            else -> {
-                //all perms already granted
-                Timber.d("Permission check passed...")
-            }
+        val permissionRequestList = permissionsState.filterValues { true }
+
+        if (permissionRequestList.isNotEmpty()) {
+            multiplePermissionResultLauncher.launch(permissionRequestList.keys.toTypedArray())
+        } else {
+            Timber.d("Permission check passed...")
         }
 
-        // Check if the user has granted the INTERNET permission
 
     }
 }
