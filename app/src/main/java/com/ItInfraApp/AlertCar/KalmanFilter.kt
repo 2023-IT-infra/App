@@ -1,3 +1,6 @@
+/**
+ * 롱나ㅓㄹ미랑
+ */
 class KalmanFilter(
     private var processNoise: Double = 0.08,
     private var measurementNoise: Double = 10.0
