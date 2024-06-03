@@ -127,7 +127,18 @@ class MainActivity : ComponentActivity() {
     private fun entry() {
         // Check for BLE Permissions
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
-        multiplePermissionHandler.checkBlePermissions(bluetoothAdapter)
+
+        // 빌드 번호 확인
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Check for BLE Permissions
+            multiplePermissionHandler.checkBlePermissions(bluetoothAdapter)
+            multiplePermissionHandler.checkInternetPermissions()
+        }  else {
+            // Check for Internet Permissions
+            multiplePermissionHandler.checkLocationPermissions()
+            multiplePermissionHandler.checkInternetPermissions()
+        }
+
     }
 
     private fun startBleForegroundService() {
@@ -151,7 +162,7 @@ class MainActivity : ComponentActivity() {
         return false
     }
 
-    fun finishAllServices(serviceClass: Class<*>) {
+    private fun finishAllServices(serviceClass: Class<*>) {
         val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         for (service in manager.getRunningServices(Integer.MAX_VALUE)) {
             if (serviceClass.name == service.service.className) {

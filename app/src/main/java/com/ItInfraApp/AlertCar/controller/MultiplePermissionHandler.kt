@@ -26,66 +26,6 @@ class MultiplePermissionHandler(
     private val context: Context
 ) {
 
-    // Activity Result API call to check if bluetooth is enabled
-    private val requestEnableBtLauncher by lazy(LazyThreadSafetyMode.NONE) {
-        activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                Toast.makeText(context, "Bluetooth enabled", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, "Bluetooth not enabled", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    // Activity Result API call for Fine Location permission
-    private val requestFineLocationPermissionLauncher by lazy(LazyThreadSafetyMode.NONE) {
-        activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
-                Toast.makeText(context, "Location permission granted", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private val requestBluetoothScanPermissionLauncher by lazy(LazyThreadSafetyMode.NONE) {
-        activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
-                Toast.makeText(context, "Bluetooth Scan permission granted", Toast.LENGTH_SHORT)
-                    .show()
-            } else {
-                Toast.makeText(context, "Bluetooth Scan permission denied", Toast.LENGTH_SHORT)
-                    .show()
-            }
-        }
-    }
-
-    private val requestBluetoothConnectPermissionLauncher by lazy(LazyThreadSafetyMode.NONE) {
-        activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
-                Toast.makeText(context, "Bluetooth Connect permission granted", Toast.LENGTH_SHORT)
-                    .show()
-            } else {
-                Toast.makeText(context, "Bluetooth Connect permission denied", Toast.LENGTH_SHORT)
-                    .show()
-
-            }
-        }
-    }
-
-    private val requestInternetPermissionLauncher by lazy(LazyThreadSafetyMode.NONE) {
-        activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
-                Toast.makeText(context, "Internet permission granted", Toast.LENGTH_SHORT)
-                    .show()
-            } else {
-                Toast.makeText(context, "Internet permission denied", Toast.LENGTH_SHORT)
-                    .show()
-            }
-        }
-
-    }
-
     private val multiplePermissionResultLauncher by lazy(LazyThreadSafetyMode.NONE) {
 
         activity.registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -103,6 +43,13 @@ class MultiplePermissionHandler(
                         "$permission is required. Please grant this permission.",
                         Toast.LENGTH_SHORT
                     ).show()
+
+                    // Request the permission again
+                    ActivityCompat.requestPermissions(
+                        activity,
+                        arrayOf(permission),
+                        1
+                    )
                 }
             }
         }
@@ -113,8 +60,7 @@ class MultiplePermissionHandler(
      *
      * @param bluetoothAdapter The BluetoothAdapter instance.
      */
-
-
+    @RequiresApi(Build.VERSION_CODES.S)
     fun checkBlePermissions(bluetoothAdapter: BluetoothAdapter?) {
         Timber.d("Checking permissions...")
 
@@ -126,54 +72,77 @@ class MultiplePermissionHandler(
             this.activity.finish() // TODO() make this more elegant and don't just crash
         }
 
+
         val permissionsStateScan = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_SCAN
-            ) != PackageManager.PERMISSION_GRANTED
+            context,
+            Manifest.permission.BLUETOOTH_SCAN
+        ) != PackageManager.PERMISSION_GRANTED
 
 
         val permissionsStateConnect = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED
-
-        val permissionsStateLocation = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED
-
-        val permissionsBackgroundLocation = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED
-
-        // Integrate the INTERNET permission check
-         val permissionsStateInternet = ContextCompat.checkSelfPermission(
-                 context,
-                 Manifest.permission.INTERNET
-             ) != PackageManager.PERMISSION_GRANTED
+            context,
+            Manifest.permission.BLUETOOTH_CONNECT
+        ) != PackageManager.PERMISSION_GRANTED
 
 
-        val permissionsState: Map<String, Boolean> = mapOf(
+        val permissions = mapOf(
             Manifest.permission.BLUETOOTH_SCAN to permissionsStateScan,
-            Manifest.permission.BLUETOOTH_CONNECT to permissionsStateConnect,
-            Manifest.permission.ACCESS_FINE_LOCATION to permissionsStateLocation,
-            Manifest.permission.ACCESS_BACKGROUND_LOCATION to permissionsBackgroundLocation,
-            Manifest.permission.INTERNET to permissionsStateInternet
+            Manifest.permission.BLUETOOTH_CONNECT to permissionsStateConnect
         )
 
+        val permissionsToRequest = permissions.filterValues { true }.keys.toTypedArray()
 
-        Timber.d("PermissionsState is $permissionsState")
-        // _ _ _ -> FINE_LOCATION, BLUETOOTH_SCAN, BLUETOOTH_CONNECT, INTERNET
-
-        val permissionRequestList = permissionsState.filterValues { true }
-
-        if (permissionRequestList.isNotEmpty()) {
-            multiplePermissionResultLauncher.launch(permissionRequestList.keys.toTypedArray())
+        if (permissionsToRequest.isNotEmpty()) {
+            multiplePermissionResultLauncher.launch(permissionsToRequest)
         } else {
             Timber.d("Permission check passed...")
         }
 
+    }
 
+    fun checkLocationPermissions() {
+        val permissionsStateLocation = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) != PackageManager.PERMISSION_GRANTED
+
+        val permissionsStateBtAdmin = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.BLUETOOTH_ADMIN
+        ) != PackageManager.PERMISSION_GRANTED
+
+        val permissionsStateBt = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.BLUETOOTH
+        ) != PackageManager.PERMISSION_GRANTED
+
+        val permissions = mapOf(
+            Manifest.permission.ACCESS_FINE_LOCATION to permissionsStateLocation,
+            Manifest.permission.BLUETOOTH_ADMIN to permissionsStateBtAdmin,
+            Manifest.permission.BLUETOOTH to permissionsStateBt
+        )
+
+        val permissionsToRequest = permissions.filterValues { true }.keys.toTypedArray()
+
+        if (permissionsToRequest.isNotEmpty()) {
+            multiplePermissionResultLauncher.launch(permissionsToRequest)
+        } else {
+            Timber.d("Permission check passed...")
+        }
+
+    }
+
+
+    fun checkInternetPermissions() {
+        val permissionsStateInternet = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.INTERNET
+        ) != PackageManager.PERMISSION_GRANTED
+
+        if (permissionsStateInternet) {
+            multiplePermissionResultLauncher.launch(arrayOf(Manifest.permission.INTERNET))
+        } else {
+            Timber.d("Permission check passed...")
+        }
     }
 }

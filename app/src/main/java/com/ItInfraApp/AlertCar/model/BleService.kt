@@ -25,6 +25,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.Settings
 import android.util.Log
+import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -40,6 +41,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import timber.log.Timber
 import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.HttpsURLConnection
+
 
 class BleService: Service() {
     // Binder given to clients (notice class declaration below)
@@ -67,7 +69,7 @@ class BleService: Service() {
 
     // Define Scan Settings
     private val scanSettings = ScanSettings.Builder()
-        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+        .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
         .setMatchMode(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
         .build()
 
@@ -172,6 +174,7 @@ class BleService: Service() {
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 setSound(Settings.System.DEFAULT_ALARM_ALERT_URI, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
+                enableVibration(true)
             }
 
             val manager = getSystemService(NotificationManager::class.java)
@@ -209,28 +212,15 @@ class BleService: Service() {
         sendBroadcast(intent)
     }
 
+    @SuppressLint("MissingPermission")
     private fun startScanning(scanFilters: List<ScanFilter>) {
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_SCAN
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
             bluetoothLeScanner.startScan(scanFilters, scanSettings, scanCallback)
-        }
-        Log.d(TAG, "BLE scan started.")
     }
 
+    @SuppressLint("MissingPermission")
     private fun stopScanning() {
-
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_SCAN
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            bluetoothLeScanner.stopScan(scanCallback)
-        }
-        Log.d(TAG, "BLE scan stopped.")
-
+        bluetoothLeScanner.stopScan(scanCallback)
+        Log.d(TAG, "Scanning stopped")
     }
 
     // Device scan Callback
@@ -270,13 +260,14 @@ class BleService: Service() {
                     .setContentText(message)
                     .setSmallIcon(R.drawable.mdi__truck_alert_outline)
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setVibrate(longArrayOf(0, vibratorAmp.toLong(), 0, vibratorAmp.toLong(), 0, vibratorAmp.toLong()))
                     .build()
 
-                val timings = longArrayOf(100, 200, 100, 200, 100, 200)
-                val amplitudes = intArrayOf(0, vibratorAmp, 0, vibratorAmp, 0, vibratorAmp)
-
-                val effect = VibrationEffect.createWaveform(timings, amplitudes, 0)
-                vibrator.vibrate(effect)
+//                val timings = longArrayOf(0, 100)
+//                val amplitudes = intArrayOf(0, vibratorAmp)
+//
+//                val effect = VibrationEffect.createWaveform(timings, amplitudes, 0)
+//                vibrator.vibrate(effect)
 
                 with(NotificationManagerCompat.from(this@BleService)) {
                     notify(index, notification)
@@ -307,9 +298,6 @@ class BleService: Service() {
             Timber.e("BLE Scan failed with error code: $errorCode")
             updateFailedScanResult( errorCode)
         }
-
-
-
 
     }
 
