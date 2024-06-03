@@ -1,7 +1,6 @@
 package com.ItInfraApp.AlertCar.model
 
 import KalmanFilter
-import android.Manifest
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -15,32 +14,21 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
-import android.os.VibrationEffect
 import android.os.Vibrator
-import android.os.VibratorManager
 import android.provider.Settings
 import android.util.Log
-import androidx.annotation.RequiresPermission
-import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.ItInfraApp.AlertCar.R
 import com.ItInfraApp.AlertCar.entity.BluetoothDevice
-import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
 import timber.log.Timber
-import javax.net.ssl.HostnameVerifier
-import javax.net.ssl.HttpsURLConnection
 
 
 class BleService: Service() {
@@ -69,8 +57,6 @@ class BleService: Service() {
 
     // Define Scan Settings
     private val scanSettings = ScanSettings.Builder()
-        .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
-        .setMatchMode(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
         .build()
 
     private fun fetchAndStartScan() {
@@ -180,7 +166,6 @@ class BleService: Service() {
             manager.createNotificationChannel(serviceChannel)
             manager.createNotificationChannel(alertChannel)
 
-
         }
     }
 
@@ -213,7 +198,7 @@ class BleService: Service() {
 
     @SuppressLint("MissingPermission")
     private fun startScanning(scanFilters: List<ScanFilter>) {
-            bluetoothLeScanner.startScan(scanFilters, scanSettings, scanCallback)
+            bluetoothLeScanner.startScan(scanCallback)
     }
 
     @SuppressLint("MissingPermission")
@@ -230,6 +215,7 @@ class BleService: Service() {
             Timber.d("onScanResult: $result")
 
             val indexQuery = filteredScanResults.indexOfFirst { it.scanResult.device.address == result.device.address }
+
             if (indexQuery != -1) { // A scan result already exists with the same address
                 // Use the corresponding KalmanFilter to filter the RSSI value
                 val filteredRssi = kalmanFilters[indexQuery].filtering(result.rssi.toDouble()).toInt()
@@ -238,6 +224,7 @@ class BleService: Service() {
                 with(result.device) {
                     Timber.d("Found BLE device! Name: ${name ?: "Unnamed"}, address: $address")
                 }
+                filteredScanResults.clear()
                 // Add a new KalmanFilter for the new device
                 val kalmanFilter = KalmanFilter()
                 val resultRssi = kalmanFilter.filtering(result.rssi.toDouble())
@@ -295,7 +282,7 @@ class BleService: Service() {
         override fun onScanFailed(errorCode: Int) {
             super.onScanFailed(errorCode)
             Timber.e("BLE Scan failed with error code: $errorCode")
-            updateFailedScanResult( errorCode)
+            updateFailedScanResult(errorCode)
         }
 
     }

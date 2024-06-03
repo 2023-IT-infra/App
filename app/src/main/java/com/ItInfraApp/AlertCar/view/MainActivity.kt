@@ -62,10 +62,6 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var bluetoothAdapter: BluetoothAdapter
 
-    private lateinit var bleIntent: Intent
-
-
-
     // Create Multiple Permission Handler to handle all the required permissions
     private val multiplePermissionHandler: MultiplePermissionHandler by lazy {
         MultiplePermissionHandler(this, this)
@@ -145,7 +141,7 @@ class MainActivity : ComponentActivity() {
         unregisterReceiver(updateReceiver)
     }
 
-    fun isMyServiceRunning(serviceClass: Class<*>): Boolean {
+    private fun isMyServiceRunning(serviceClass: Class<*>): Boolean {
         val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         for (service in manager.getRunningServices(Integer.MAX_VALUE)) {
             if (serviceClass.name == service.service.className) {
@@ -385,7 +381,6 @@ class MainActivity : ComponentActivity() {
                             indication = null, // 클릭 시 리플 효과 제거
                             onClick = {
                                 if (isButtonEnabled) {
-                                    isButtonEnabled = false // 버튼 비활성화
                                     isScanning = !isScanning
 
                                     if (isScanning) {

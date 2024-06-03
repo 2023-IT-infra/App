@@ -69,9 +69,8 @@ class MultiplePermissionHandler(
             Timber.e("Bluetooth not enabled, terminating...")
             Toast.makeText(context, "Please turn on Bluetooth and try again.", Toast.LENGTH_SHORT)
                 .show()
-            this.activity.finish() // TODO() make this more elegant and don't just crash
+            this.activity.finish()
         }
-
 
         val permissionsStateScan = ContextCompat.checkSelfPermission(
             context,
@@ -84,10 +83,22 @@ class MultiplePermissionHandler(
             Manifest.permission.BLUETOOTH_CONNECT
         ) != PackageManager.PERMISSION_GRANTED
 
+        val permissionsStateLocation = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) != PackageManager.PERMISSION_GRANTED
+
+        val permissionsStateBtAdmin = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.BLUETOOTH_ADMIN
+        ) != PackageManager.PERMISSION_GRANTED
+
 
         val permissions = mapOf(
             Manifest.permission.BLUETOOTH_SCAN to permissionsStateScan,
-            Manifest.permission.BLUETOOTH_CONNECT to permissionsStateConnect
+            Manifest.permission.BLUETOOTH_CONNECT to permissionsStateConnect,
+            Manifest.permission.ACCESS_FINE_LOCATION to permissionsStateLocation,
+            Manifest.permission.BLUETOOTH_ADMIN to permissionsStateBtAdmin
         )
 
         val permissionsToRequest = permissions.filterValues { true }.keys.toTypedArray()
