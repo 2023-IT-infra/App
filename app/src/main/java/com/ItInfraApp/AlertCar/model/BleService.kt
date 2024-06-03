@@ -147,7 +147,6 @@ class BleService: Service() {
     override fun onBind(intent: Intent?): IBinder? {
         return mBinder
     }
-
     private fun startForeground() {
         createNotificationChannel()
 

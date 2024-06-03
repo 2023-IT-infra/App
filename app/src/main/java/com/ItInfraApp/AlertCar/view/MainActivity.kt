@@ -77,7 +77,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         viewModel = ViewModelProvider(this)[SharedViewModel::class.java]
-        startBleForegroundService()
 
         // init Timber
         if (BuildConfig.DEBUG) {
@@ -139,12 +138,6 @@ class MainActivity : ComponentActivity() {
             multiplePermissionHandler.checkInternetPermissions()
         }
 
-    }
-
-    private fun startBleForegroundService() {
-        // Start the BLE Foreground Service
-        bleIntent = Intent(this, BleService::class.java)
-        ContextCompat.startForegroundService(this, bleIntent)
     }
 
     override fun onDestroy() {
