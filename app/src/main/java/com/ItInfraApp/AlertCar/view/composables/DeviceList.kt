@@ -28,13 +28,13 @@ fun DeviceList(viewModel: SharedViewModel) {
     ) {
         items(scanResults) { scanResult ->
             val deviceModel = DeviceModel(
-                name = scanResult.device.name ?: "Unknown",
-                address = scanResult.device.address ?: "Unknown",
-                rssi = scanResult.rssi,
-                bondState = scanResult.device.bondState,
-                advertiseFlags = scanResult.scanRecord!!.advertiseFlags,
-                rawDataBytes = scanResult.scanRecord!!.bytes,
-                parsedBytes = AdvParser().parseBytes(scanResult.scanRecord!!.bytes, scanResult.device.name ?: "Unknown"))
+                name = scanResult.scanResult.device.name ?: "Unknown",
+                address = scanResult.scanResult.device.address ?: "Unknown",
+                rssi = scanResult.scanResult.rssi,
+                bondState = scanResult.scanResult.device.bondState,
+                advertiseFlags = scanResult.scanResult.scanRecord!!.advertiseFlags,
+                rawDataBytes = scanResult.scanResult.scanRecord!!.bytes,
+                parsedBytes = AdvParser().parseBytes(scanResult.scanResult.scanRecord!!.bytes, scanResult.scanResult.device.name ?: "Unknown"))
             ExpandableDeviceCard(deviceModel = deviceModel)
         }
     }

@@ -1,6 +1,6 @@
 package com.ItInfraApp.AlertCar.model
 
-import android.Manifest
+import KalmanFilter
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,29 +14,22 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.Vibrator
 import android.provider.Settings
 import android.util.Log
-import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.room.Room
+import com.ItInfraApp.AlertCar.R
 import com.ItInfraApp.AlertCar.entity.BluetoothDevice
-import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
 import timber.log.Timber
-import java.util.concurrent.TimeUnit
-import javax.net.ssl.HostnameVerifier
-import javax.net.ssl.HttpsURLConnection
+
 
 class BleService: Service() {
     // Binder given to clients (notice class declaration below)
@@ -44,6 +37,13 @@ class BleService: Service() {
 
     private val TAG = "BleService"
 
+    // KalmanFilter 객체 생성
+    val kalmanFilters = mutableListOf<KalmanFilter>()
+
+    // Retrofit 객체 생성
+    private val client = Client.apiService
+
+    val vibrator: Vibrator by lazy { getSystemService(Context.VIBRATOR_SERVICE) as Vibrator }
 
     // lazy load bluetoothAdapter and bluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? by lazy(LazyThreadSafetyMode.NONE) {
@@ -54,36 +54,16 @@ class BleService: Service() {
     // Scanning
     private val bluetoothLeScanner: BluetoothLeScanner by lazy { bluetoothAdapter?.bluetoothLeScanner!! }
 
+
     // Define Scan Settings
     private val scanSettings = ScanSettings.Builder()
-        .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
-        .setMatchMode(ScanSettings.MATCH_MODE_STICKY)
         .build()
 
-    val logging = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
-    }
-
-    val hostnameVerifier = HostnameVerifier { hostname, session ->
-        if (hostname == "svr.kiwiwip.duckdns.org") true else HttpsURLConnection.getDefaultHostnameVerifier().verify(hostname, session)
-    }
-
     private fun fetchAndStartScan() {
-        val retrofit = Retrofit.Builder()
-            .baseUrl("https://svr.kiwiwip.duckdns.org/")
-            .addConverterFactory(GsonConverterFactory.create())
-            .client(
-                OkHttpClient.Builder()
-                    .addInterceptor(logging)
-                    .hostnameVerifier(hostnameVerifier)
-                    .build()
-            )
-            .build()
 
-        val apiService = retrofit.create(ApiService::class.java)
 
         Log.d(TAG, "Fetching devices from server.")
-        apiService.getAllDevices().enqueue(
+        client.getAllDevices().enqueue(
             object : Callback<List<BluetoothDevice>> {
                 override fun onResponse(call: Call<List<BluetoothDevice>>, response: Response<List<BluetoothDevice>>) {
                     Log.d(TAG, "Response: $response")
@@ -117,12 +97,7 @@ class BleService: Service() {
         )
     }
 
-
-    //private val deviceAddressFilter = listOf("FC:45:C3:A3:09:6A", "FF:FF:70:80:0D:95", "DC:B5:4F:0F:73:AE")
-
-
-    private val scanResults = mutableListOf<ScanResult>()
-
+    private val filteredScanResults = mutableListOf<FilteredScanResult>()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Action Received: ${intent?.action}")
@@ -158,14 +133,13 @@ class BleService: Service() {
     override fun onBind(intent: Intent?): IBinder? {
         return mBinder
     }
-
     private fun startForeground() {
         createNotificationChannel()
 
         val notification = NotificationCompat.Builder(this, "BLE")
-            .setContentTitle("BLE Service")
-            .setContentText("BLE Service is running")
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("ALERT CAR SYSTEM RUNNING")
+            .setContentText("Scanning around for Car")
+            .setSmallIcon(R.drawable.line_md__bell_alert_loop)
             .build()
 
         startForeground(1, notification)
@@ -184,15 +158,13 @@ class BleService: Service() {
                 "Alert Channel",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Alert Channel"
-                vibrationPattern = longArrayOf(0, 1000, 500, 1000, 500, 1000, 500, 1000, 500, 1000)
-                setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build())
+                setSound(Settings.System.DEFAULT_ALARM_ALERT_URI, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
+                enableVibration(true)
             }
 
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
             manager.createNotificationChannel(alertChannel)
-
 
         }
     }
@@ -205,7 +177,8 @@ class BleService: Service() {
     override fun onDestroy() {
         Log.d(TAG, "onDestroy called")
         stopScanning()
-        scanResults.clear()
+        kalmanFilters.clear()
+        filteredScanResults.clear()
         updateBleScanResult()
         super.onDestroy()
     }
@@ -219,34 +192,19 @@ class BleService: Service() {
 
     private fun updateBleScanResult() {
         val intent = Intent(Actions.ACTION_DEVICE_DATA_CHANGED)
-        intent.putParcelableArrayListExtra("scan_results", scanResults as ArrayList<ScanResult>)
+        intent.putParcelableArrayListExtra("scan_results", filteredScanResults as ArrayList<FilteredScanResult>)
         sendBroadcast(intent)
     }
 
+    @SuppressLint("MissingPermission")
     private fun startScanning(scanFilters: List<ScanFilter>) {
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_SCAN
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            bluetoothLeScanner.startScan(scanFilters, scanSettings, scanCallback)
-            Log.d(TAG, "BLE scan started.")
-        }
-        Log.d(TAG, "BLE scan started.")
+            bluetoothLeScanner.startScan(scanCallback)
     }
 
+    @SuppressLint("MissingPermission")
     private fun stopScanning() {
-
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_SCAN
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            bluetoothLeScanner.stopScan(scanCallback)
-            Log.d(TAG, "BLE scan stopped.")
-        }
-        Log.d(TAG, "BLE scan stopped.")
-
+        bluetoothLeScanner.stopScan(scanCallback)
+        Log.d(TAG, "Scanning stopped")
     }
 
     // Device scan Callback
@@ -255,32 +213,68 @@ class BleService: Service() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             Timber.d("onScanResult: $result")
-            val indexQuery = scanResults.indexOfFirst { it.device.address == result.device.address }
-            if (indexQuery != -1) { // A scan result already exists with the same address
 
-                scanResults[indexQuery] = result
+            val indexQuery = filteredScanResults.indexOfFirst { it.scanResult.device.address == result.device.address }
+
+            if (indexQuery != -1) { // A scan result already exists with the same address
+                // Use the corresponding KalmanFilter to filter the RSSI value
+                val filteredRssi = kalmanFilters[indexQuery].filtering(result.rssi.toDouble()).toInt()
+                filteredScanResults[indexQuery] = FilteredScanResult(result, filteredRssi)
             } else {
                 with(result.device) {
                     Timber.d("Found BLE device! Name: ${name ?: "Unnamed"}, address: $address")
                 }
-                scanResults.add(result)
+                filteredScanResults.clear()
+                // Add a new KalmanFilter for the new device
+                val kalmanFilter = KalmanFilter()
+                val resultRssi = kalmanFilter.filtering(result.rssi.toDouble())
+                kalmanFilters.add(kalmanFilter)
+                // Add the new device result and a new KalmanFilter for it
+                filteredScanResults.add(FilteredScanResult(result, resultRssi.toInt()))
             }
 
-            for (device in scanResults) {
-                Log.d(TAG, "Device: ${device.device.name} - ${device.device.address} - ${device.rssi}")
-                if(device.rssi> -60) {
-                    val notification = NotificationCompat.Builder(this@BleService, "Alert")
-                        .setContentTitle("BLE Device Alert")
-                        .setContentText("BLE Device is in range")
-                        .setSmallIcon(android.R.drawable.ic_dialog_info)
-                        .setPriority(NotificationCompat.PRIORITY_HIGH)
-                        .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000, 500, 1000, 500, 1000))
-                        .build()
-
-                    with(NotificationManagerCompat.from(this@BleService)) {
-                        notify(device.advertisingSid, notification)
-                    }
+            fun alertNotification(channelId: String, vibratorAmp: Int, index: Int, state: Int) {
+                val message = when (state) {
+                    1 -> "Car is near you!"
+                    2 -> "be careful! Car is near you!"
+                    3 -> "watch out! Car is very near you!"
+                    else -> ""
                 }
+
+                val notification = NotificationCompat.Builder(this@BleService, channelId)
+                    .setContentTitle("Car Alert!")
+                    .setContentText(message)
+                    .setSmallIcon(R.drawable.mdi__truck_alert_outline)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setVibrate(longArrayOf(0, vibratorAmp.toLong(), 0, vibratorAmp.toLong(), 0, vibratorAmp.toLong()))
+                    .build()
+
+//                val timings = longArrayOf(0, 100)
+//                val amplitudes = intArrayOf(0, vibratorAmp)
+//
+//                val effect = VibrationEffect.createWaveform(timings, amplitudes, 0)
+//                vibrator.vibrate(effect)
+
+                with(NotificationManagerCompat.from(this@BleService)) {
+                    notify(index, notification)
+                }
+
+            }
+
+            for (device in filteredScanResults) {
+                Log.d(TAG, "Device: ${device.scanResult.device.name} - ${device.scanResult.device.address} - ${device.scanResult.rssi} - ${device.filteredRssi} - ${device.scanResult.txPower}")
+
+                Log.d(TAG, "advertisingSid: ${device.scanResult.advertisingSid}")
+
+                if(device.filteredRssi > -70) {
+                    alertNotification("Alert", 50, filteredScanResults.indexOf(device), 3)
+                } else if(device.filteredRssi > -80) {
+                    alertNotification("Alert", 100, filteredScanResults.indexOf(device), 2)
+                } else if(device.filteredRssi > -90) {
+                    alertNotification("Alert", 150, filteredScanResults.indexOf(device), 1)
+                }
+
+
             }
             updateBleScanResult()
         }
@@ -288,11 +282,12 @@ class BleService: Service() {
         override fun onScanFailed(errorCode: Int) {
             super.onScanFailed(errorCode)
             Timber.e("BLE Scan failed with error code: $errorCode")
-            updateFailedScanResult( errorCode)
+            updateFailedScanResult(errorCode)
         }
 
-
     }
+
+
 
 
 }
