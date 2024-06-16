@@ -28,6 +28,7 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import timber.log.Timber
+import kotlin.math.pow
 
 
 class BleService: Service() {
@@ -292,6 +293,8 @@ class BleService: Service() {
                         "Device: ${device.name} - ${device.address} - ${device.filteredRssi} - ${device.txPower}"
                     )
 
+                    val distance = 10.0.pow(((device.txPower - device.filteredRssi) / 20.0))
+                    Log.d(TAG, "Distance: $distance")
 
                     if (device.filteredRssi > -70) {
                         alertNotification("Alert", 50, filteredScanResults.indexOf(device), 3)
