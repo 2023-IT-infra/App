@@ -14,27 +14,16 @@ object Client {
         level = HttpLoggingInterceptor.Level.BODY
     }
 
-    val hostnameVerifier = HostnameVerifier { hostname, session ->
-        if (hostname == "svr.kiwiwip.duckdns.org") true else HttpsURLConnection.getDefaultHostnameVerifier()
-            .verify(hostname, session)
-    }
-
-
     val apiService: ApiService by lazy {
-        getRetrogfit().create(ApiService::class.java)
+        getRetrofit().create(ApiService::class.java)
     }
 
-    private fun getRetrogfit(): Retrofit {
+    private fun getRetrofit(): Retrofit {
         if (rertofit == null) {
             rertofit = Retrofit.Builder()
                 .baseUrl("https://svr.kiwiwip.duckdns.org/")
                 .addConverterFactory(GsonConverterFactory.create())
-                .client(
-                    OkHttpClient.Builder()
-                        .addInterceptor(logging)
-                        .hostnameVerifier(hostnameVerifier)
-                        .build()
-                )
+                .client(OkHttpClient.Builder().addInterceptor(logging).build())
                 .build()
         }
 

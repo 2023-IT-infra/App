@@ -180,7 +180,6 @@ class BleService: Service() {
         super.onDestroy()
     }
 
-
     private fun updateFailedScanResult(errorCode: Int) {
         val intent = Intent(Actions.ACTION_DEVICE_DATA_UPDATED)
         intent.putExtra(Actions.ACTION_DEVICE_DATA_UPDATED, errorCode)
@@ -203,7 +202,6 @@ class BleService: Service() {
         bluetoothLeScanner.stopScan(scanCallback)
         Log.d(TAG, "Scanning stopped")
     }
-
 
     // Device scan Callback
     private val scanCallback: ScanCallback = object : ScanCallback() {
@@ -233,7 +231,8 @@ class BleService: Service() {
                                     name = scanResult.device.name ?: "Unknown",
                                     address = scanResult.device.address,
                                     txPower = txPowers[macAddresses.indexOf(scanResult.device.address)],
-                                    filteredRssi = kalmanFilter.filtering(scanResult.rssi.toDouble()).toInt()
+                                    filteredRssi = kalmanFilter.filtering(scanResult.rssi.toDouble()).toInt(),
+                                    distance = 10.0.pow((txPowers[macAddresses.indexOf(scanResult.device.address)] - kalmanFilter.filtering(scanResult.rssi.toDouble())) / 20.0)
                                 )
                             )
                         }
