@@ -17,7 +17,9 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.os.Binder
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -29,7 +31,7 @@ import retrofit2.Callback
 import retrofit2.Response
 import timber.log.Timber
 import kotlin.math.pow
-
+import java.util.concurrent.ConcurrentHashMap
 
 class BleService: Service() {
     // Binder given to clients (notice class declaration below)
@@ -48,6 +50,8 @@ class BleService: Service() {
 
     private val txPowers = mutableListOf<Int>()
 
+    private val MAX_RETRY_COUNT = 3
+    private var retryCount = 0
 
     // lazy load bluetoothAdapter and bluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? by lazy(LazyThreadSafetyMode.NONE) {
@@ -56,18 +60,22 @@ class BleService: Service() {
     }
 
     // Scanning
-    private val bluetoothLeScanner: BluetoothLeScanner by lazy { bluetoothAdapter?.bluetoothLeScanner!! }
+    private val bluetoothLeScanner: BluetoothLeScanner? by lazy { bluetoothAdapter?.bluetoothLeScanner }
 
     // Define Scan Settings
     private val scanSettings = ScanSettings.Builder()
         .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
         .build()
 
+    // Device last seen map
+    private val deviceLastSeenMap = ConcurrentHashMap<String, Long>()
+    private val SCAN_TIMEOUT_MS = 5000L
+
+
     /**
      * 서버로부터 Mac 주소 리스트를 가져오고, 해당 리스트를 반환한다.
      */
     private fun fetchListMacAddresses() {
-
         Log.d(TAG, "Fetching devices from server.")
         client.getAllDevices().enqueue(
             object : Callback<List<BluetoothDevice>> {
@@ -76,17 +84,39 @@ class BleService: Service() {
                     response: Response<List<BluetoothDevice>>
                 ) {
                     if (response.isSuccessful) {
-                        macAddresses.addAll(response.body()?.map { it.mac } ?: emptyList())
-                        txPowers.addAll(response.body()?.map { it.txPower } ?: emptyList())
+                        response.body()?.let { devices ->
+                            macAddresses.addAll(devices.mapNotNull { it.MAC })
+                            txPowers.addAll(devices.map { it.txPower })
+                            retryCount = 0 // 성공 시 재시도 횟수 초기화
+                        } ?: run {
+                            Log.e(TAG, "Response body is null")
+                        }
+                    } else {
+                        Log.e(TAG, "Response is not successful: ${response.errorBody()?.string()}")
+                        retryFetchListMacAddresses()
                     }
                 }
+
                 override fun onFailure(call: Call<List<BluetoothDevice>>, t: Throwable) {
-                    // 에러 처리
                     Timber.e(t, "Failed to fetch devices from server.")
+                    retryFetchListMacAddresses()
                 }
             }
         )
+    }
 
+    private fun retryFetchListMacAddresses() {
+        if (retryCount < MAX_RETRY_COUNT) {
+            retryCount++
+            Log.d(TAG, "Retrying to fetch devices from server. Attempt: $retryCount")
+            // 일정 시간 후 재시도 (예: 2초 후)
+            Handler(Looper.getMainLooper()).postDelayed({
+                fetchListMacAddresses()
+            }, 2000)
+        } else {
+            Log.e(TAG, "Max retry attempts reached. Failed to fetch devices from server.")
+            // 사용자에게 알림 또는 다른 에러 처리 로직 추가 가능
+        }
     }
 
     private val filteredScanResults = mutableListOf<FilteredScanResult>()
@@ -194,12 +224,12 @@ class BleService: Service() {
 
     @SuppressLint("MissingPermission")
     private fun startScanning() {
-            bluetoothLeScanner.startScan(scanCallback)
+        bluetoothLeScanner?.startScan(scanCallback) ?: Log.e(TAG, "BluetoothLeScanner is null")
     }
 
     @SuppressLint("MissingPermission")
     private fun stopScanning() {
-        bluetoothLeScanner.stopScan(scanCallback)
+        bluetoothLeScanner?.stopScan(scanCallback) ?: Log.e(TAG, "BluetoothLeScanner is null")
         Log.d(TAG, "Scanning stopped")
     }
 
@@ -209,103 +239,8 @@ class BleService: Service() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             super.onScanResult(callbackType, result)
-        }
-
-        @SuppressLint("MissingPermission")
-        override fun onBatchScanResults(results: MutableList<ScanResult>) {
-            // results 리스트에 macAddresses 리스트에 포함된 mac 주소가 있는지 확인하고, 있으면 filteredScanResults 리스트에 해당 주소가 있으면 추가하고, 없으면 rssi 값을 업데이트 한다. mac 주소가 없으면 filteredScanResults 리스트에서 삭제한다
-            results.forEach { scanResult ->
-                if (scanResult.device.address in macAddresses) {
-                    filteredScanResults.map { it.address }.contains(scanResult.device.address).let {
-                        if (it) {
-                            val filteredScanResult = filteredScanResults.find { it.address == scanResult.device.address }
-                            filteredScanResult?.filteredRssi =
-                                kalmanFilters[filteredScanResults.indexOf(filteredScanResult)].filtering(
-                                    scanResult.rssi.toDouble()
-                                ).toInt()
-                        } else {
-                            val kalmanFilter = KalmanFilter()
-                            kalmanFilters.add(kalmanFilter)
-                            filteredScanResults.add(
-                                FilteredScanResult(
-                                    name = scanResult.device.name ?: "Unknown",
-                                    address = scanResult.device.address,
-                                    txPower = txPowers[macAddresses.indexOf(scanResult.device.address)],
-                                    filteredRssi = kalmanFilter.filtering(scanResult.rssi.toDouble()).toInt(),
-                                    distance = 10.0.pow((txPowers[macAddresses.indexOf(scanResult.device.address)] - kalmanFilter.filtering(scanResult.rssi.toDouble())) / 20.0)
-                                )
-                            )
-                        }
-                    }
-                } else {
-                    filteredScanResults.map { it.address }.contains(scanResult.device.address).let {
-                        if (it) {
-                            val filteredScanResult =
-                                filteredScanResults.find { filteredScanResult ->
-                                    filteredScanResult.address == scanResult.device.address
-                                }
-                            filteredScanResults.remove(filteredScanResult)
-                            kalmanFilters.removeAt(filteredScanResults.indexOf(filteredScanResult))
-                        }
-                    }
-
-                }
-            }
-
-                fun alertNotification(channelId: String, vibratorAmp: Int, index: Int, state: Int) {
-                    val message = when (state) {
-                        1 -> "Car is near you!"
-                        2 -> "be careful! Car is near you!"
-                        3 -> "watch out! Car is very near you!"
-                        else -> ""
-                    }
-
-                    val notification = NotificationCompat.Builder(this@BleService, channelId)
-                        .setContentTitle("Car Alert!")
-                        .setContentText(message)
-                        .setSmallIcon(R.drawable.mdi__truck_alert_outline)
-                        .setPriority(NotificationCompat.PRIORITY_HIGH)
-                        .setVibrate(
-                            longArrayOf(
-                                0,
-                                vibratorAmp.toLong(),
-                                0,
-                                vibratorAmp.toLong(),
-                                0,
-                                vibratorAmp.toLong()
-                            )
-                        )
-                        .build()
-
-
-
-                    with(NotificationManagerCompat.from(this@BleService)) {
-                        notify(index, notification)
-                    }
-                }
-
-
-
-                for (device in filteredScanResults) {
-                    Log.d(
-                        TAG,
-                        "Device: ${device.name} - ${device.address} - ${device.filteredRssi} - ${device.txPower}"
-                    )
-
-                    val distance = 10.0.pow(((device.txPower - device.filteredRssi) / 20.0))
-                    Log.d(TAG, "Distance: $distance")
-
-                    if (device.filteredRssi > -70) {
-                        alertNotification("Alert", 50, filteredScanResults.indexOf(device), 3)
-                    } else if (device.filteredRssi > -80) {
-                        alertNotification("Alert", 100, filteredScanResults.indexOf(device), 2)
-                    } else if (device.filteredRssi > -90) {
-                        alertNotification("Alert", 150, filteredScanResults.indexOf(device), 1)
-                    }
-
-
-                }
-                updateBleScanResult()
+            Log.d(TAG, "onScanResult: $result")
+            handleScanResult(result)
         }
 
         override fun onScanFailed(errorCode: Int) {
@@ -314,9 +249,105 @@ class BleService: Service() {
             updateFailedScanResult(errorCode)
         }
 
+        @SuppressLint("MissingPermission")
+        private fun handleScanResult(result: ScanResult) {
+            val address = result.device.address
+
+            if (address in macAddresses) {
+                val existingResult = filteredScanResults.find { it.address == address }
+                if (existingResult != null) {
+                    val index = filteredScanResults.indexOf(existingResult)
+                    Log.d(TAG, "Existing result found at index: $filteredScanResults")
+                    existingResult.filteredRssi = kalmanFilters[index].filtering(result.rssi.toDouble()).toInt()
+                    existingResult.distance = 10.0.pow((txPowers[macAddresses.indexOf(address)] - kalmanFilters[index].filtering(result.rssi.toDouble())) / 20.0).toString().substring(0, 3).toDouble()
+                    deviceLastSeenMap[address] = System.currentTimeMillis() // Update last seen time
+                } else {
+                    val kalmanFilter = KalmanFilter()
+                    kalmanFilters.add(kalmanFilter)
+                    filteredScanResults.add(
+                        FilteredScanResult(
+                            name = result.device.name ?: "Unknown",
+                            address = address,
+                            txPower = txPowers[macAddresses.indexOf(address)],
+                            filteredRssi = kalmanFilter.filtering(result.rssi.toDouble()).toInt(),
+                            distance = 10.0.pow((txPowers[macAddresses.indexOf(address)] - kalmanFilter.filtering(result.rssi.toDouble())) / 20.0).toString().substring(0, 3).toDouble()
+                        )
+                    )
+                    deviceLastSeenMap[address] = System.currentTimeMillis() // Add to last seen map
+                }
+            }
+
+            checkAndSendAlertNotifications()
+            updateBleScanResult()
+        }
     }
 
+    private fun removeStaleDevices() {
+        val currentTime = System.currentTimeMillis()
+        val iterator = deviceLastSeenMap.entries.iterator()
+
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (currentTime - entry.value > SCAN_TIMEOUT_MS) {
+                val address = entry.key
+                val existingResult = filteredScanResults.find { it.address == address }
+                if (existingResult != null) {
+                    val index = filteredScanResults.indexOf(existingResult)
+                    kalmanFilters.removeAt(index)
+                    filteredScanResults.removeAt(index)
+                }
+                iterator.remove()
+            }
+        }
+    }
+
+    // 주기적으로 removeStaleDevices 호출
+    private val staleDeviceHandler = Handler(Looper.getMainLooper())
+    private val staleDeviceRunnable = object : Runnable {
+        override fun run() {
+            removeStaleDevices()
+            staleDeviceHandler.postDelayed(this, SCAN_TIMEOUT_MS)
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        staleDeviceHandler.post(staleDeviceRunnable)
+    }
+
+    private fun checkAndSendAlertNotifications() {
+        for (device in filteredScanResults) {
+            //소수점 첫째짜리까지만 표시
+            val distance = 10.0.pow(((device.txPower - device.filteredRssi) / 20.0)).toString().substring(0, 3)
 
 
+            when {
+                device.filteredRssi > -70 -> alertNotification("Alert", 50, filteredScanResults.indexOf(device), 3)
+                device.filteredRssi > -80 -> alertNotification("Alert", 100, filteredScanResults.indexOf(device), 2)
+                device.filteredRssi > -90 -> alertNotification("Alert", 150, filteredScanResults.indexOf(device), 1)
+            }
+        }
+    }
 
+    @SuppressLint("MissingPermission")
+    private fun alertNotification(channelId: String, vibratorAmp: Int, index: Int, state: Int) {
+        val message = when (state) {
+            1 -> "Car is near you!"
+            2 -> "Be careful! Car is near you!"
+            3 -> "Watch out! Car is very near you!"
+            else -> ""
+        }
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setContentTitle("Car Alert!")
+            .setContentText(message)
+            .setSmallIcon(R.drawable.mdi__truck_alert_outline)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVibrate(longArrayOf(0, vibratorAmp.toLong(), 0, vibratorAmp.toLong(), 0, vibratorAmp.toLong()))
+            .build()
+
+        with(NotificationManagerCompat.from(this)) {
+            notify(index, notification)
+        }
+    }
 }
