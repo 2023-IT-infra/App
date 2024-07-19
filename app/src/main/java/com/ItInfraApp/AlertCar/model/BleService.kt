@@ -15,6 +15,7 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
@@ -70,6 +71,8 @@ class BleService: Service() {
     // Device last seen map
     private val deviceLastSeenMap = ConcurrentHashMap<String, Long>()
     private val SCAN_TIMEOUT_MS = 5000L
+
+
 
 
     /**
@@ -164,8 +167,8 @@ class BleService: Service() {
         createNotificationChannel()
 
         val notification = NotificationCompat.Builder(this, "BLE")
-            .setContentTitle("ALERT CAR SYSTEM RUNNING")
-            .setContentText("Scanning around for Car")
+            .setContentTitle("차량 감지 활성 중")
+            .setContentText("주변의 차량을 감지 중입니다.")
             .setSmallIcon(R.drawable.line_md__bell_alert_loop)
             .build()
 
@@ -185,7 +188,9 @@ class BleService: Service() {
                 "Alert Channel",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                setSound(Settings.System.DEFAULT_ALARM_ALERT_URI, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
+                // Ringtone
+                val ringtone = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                setSound(ringtone, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
                 enableVibration(true)
             }
 
@@ -295,8 +300,10 @@ class BleService: Service() {
                     val index = filteredScanResults.indexOf(existingResult)
                     kalmanFilters.removeAt(index)
                     filteredScanResults.removeAt(index)
+                    cancelAlertNotification(index)
                 }
                 iterator.remove()
+
             }
         }
     }
@@ -332,22 +339,30 @@ class BleService: Service() {
     @SuppressLint("MissingPermission")
     private fun alertNotification(channelId: String, vibratorAmp: Int, index: Int, state: Int) {
         val message = when (state) {
-            1 -> "Car is near you!"
-            2 -> "Be careful! Car is near you!"
-            3 -> "Watch out! Car is very near you!"
+            1 -> "차량이 근처에 있습니다. 주의하세요!"
+            2 -> "차량이 정말 가까이 있습니다. 주의하세요!"
+            3 -> "차량이 매우 가까이 있습니다. 주의하세요!"
             else -> ""
         }
 
         val notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Car Alert!")
+            .setContentTitle("차량 알람!")
             .setContentText(message)
             .setSmallIcon(R.drawable.mdi__truck_alert_outline)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVibrate(longArrayOf(0, vibratorAmp.toLong(), 0, vibratorAmp.toLong(), 0, vibratorAmp.toLong()))
             .build()
 
+        // 이전 알림 취소
         with(NotificationManagerCompat.from(this)) {
+            // 알림 생성
             notify(index, notification)
+        }
+    }
+
+    private fun cancelAlertNotification(index: Int) {
+        with(NotificationManagerCompat.from(this)) {
+            cancel(index)
         }
     }
 }
