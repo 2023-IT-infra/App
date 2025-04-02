@@ -55,6 +55,7 @@ import com.airbnb.lottie.compose.animateLottieCompositionAsState
 import com.airbnb.lottie.compose.rememberLottieComposition
 import kotlinx.coroutines.delay
 import timber.log.Timber
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
 
@@ -594,7 +595,7 @@ class MainActivity : ComponentActivity() {
 //            )
             // 비콘의 거리를 표시하는 코드
             Text(
-                text = "거리: ${resultDistance}m",
+                text = "거리: ${(resultDistance * 10.0 ).roundToInt() / 10.0 }m",
                 style = TextStyle(
                     fontSize = 14.sp,
                     lineHeight = 20.sp,

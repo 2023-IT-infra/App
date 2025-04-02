@@ -33,6 +33,7 @@ import retrofit2.Response
 import timber.log.Timber
 import kotlin.math.pow
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.roundToInt
 
 class BleService: Service() {
     // Binder given to clients (notice class declaration below)
@@ -63,9 +64,11 @@ class BleService: Service() {
     // Scanning
     private val bluetoothLeScanner: BluetoothLeScanner? by lazy { bluetoothAdapter?.bluetoothLeScanner }
 
+
     // Define Scan Settings
     private val scanSettings = ScanSettings.Builder()
         .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+        .setReportDelay(0)
         .build()
 
     // Device last seen map
@@ -244,7 +247,6 @@ class BleService: Service() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             super.onScanResult(callbackType, result)
-            Log.d(TAG, "onScanResult: $result")
             handleScanResult(result)
         }
 
@@ -260,12 +262,15 @@ class BleService: Service() {
 
             if (address in macAddresses) {
                 val existingResult = filteredScanResults.find { it.address == address }
+                Log.d(TAG, "existingResult - $existingResult")
+
                 if (existingResult != null) {
                     val index = filteredScanResults.indexOf(existingResult)
                     Log.d(TAG, "Existing result found at index: $filteredScanResults")
                     existingResult.filteredRssi = kalmanFilters[index].filtering(result.rssi.toDouble()).toInt()
-                    existingResult.distance = 10.0.pow((txPowers[macAddresses.indexOf(address)] - kalmanFilters[index].filtering(result.rssi.toDouble())) / 20.0).toString().substring(0, 3).toDouble()
+                    existingResult.distance = 10.0.pow((txPowers[macAddresses.indexOf(address)] - kalmanFilters[index].filtering(result.rssi.toDouble())) / 20.0)
                     deviceLastSeenMap[address] = System.currentTimeMillis() // Update last seen time
+                    Log.d(TAG, "Result - ${result}")
                 } else {
                     val kalmanFilter = KalmanFilter()
                     kalmanFilters.add(kalmanFilter)
@@ -275,7 +280,7 @@ class BleService: Service() {
                             address = address,
                             txPower = txPowers[macAddresses.indexOf(address)],
                             filteredRssi = kalmanFilter.filtering(result.rssi.toDouble()).toInt(),
-                            distance = 10.0.pow((txPowers[macAddresses.indexOf(address)] - kalmanFilter.filtering(result.rssi.toDouble())) / 20.0).toString().substring(0, 3).toDouble()
+                            distance = 10.0.pow((txPowers[macAddresses.indexOf(address)] - kalmanFilter.filtering(result.rssi.toDouble())) / 20.0)
                         )
                     )
                     deviceLastSeenMap[address] = System.currentTimeMillis() // Add to last seen map
@@ -324,14 +329,11 @@ class BleService: Service() {
 
     private fun checkAndSendAlertNotifications() {
         for (device in filteredScanResults) {
-            //소수점 첫째짜리까지만 표시
-            val distance = 10.0.pow(((device.txPower - device.filteredRssi) / 20.0)).toString().substring(0, 3)
-
 
             when {
-                device.filteredRssi > -70 -> alertNotification("Alert", 50, filteredScanResults.indexOf(device), 3)
-                device.filteredRssi > -80 -> alertNotification("Alert", 100, filteredScanResults.indexOf(device), 2)
-                device.filteredRssi > -90 -> alertNotification("Alert", 150, filteredScanResults.indexOf(device), 1)
+                device.distance < 5.0 -> alertNotification("Alert", 50, filteredScanResults.indexOf(device), 3)
+                device.distance < 10.0 -> alertNotification("Alert", 100, filteredScanResults.indexOf(device), 2)
+                device.distance < 15.0 -> alertNotification("Alert", 150, filteredScanResults.indexOf(device), 1)
             }
         }
     }
