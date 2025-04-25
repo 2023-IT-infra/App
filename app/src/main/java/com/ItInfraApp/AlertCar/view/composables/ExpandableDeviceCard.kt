@@ -106,15 +106,11 @@ fun ExpandableDeviceCard(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
-                // Address and Bonding State
+                // Address
                 FlowColumn {
 
                     Text(
                         text = deviceModel.address,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Text(
-                        text = ScanResultAdapter.getBondState(deviceModel.bondState),
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -135,27 +131,6 @@ fun ExpandableDeviceCard(
                 )
                 Text(
                     text = "${deviceModel.rssi} dBm",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-        if (expandedState) {
-            FlowColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-
-            ) {
-                for (pair in deviceModel.parsedBytes) {
-                    Text(
-                        modifier = Modifier.padding(top = 5.dp, bottom = 5.dp),
-                        text = "${pair.first}\nValue:  ${pair.second}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Divider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface)
-                }
-                Text(
-                    text = "RAW Data: ${deviceModel.rawDataBytes.toHex()}",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -187,11 +162,7 @@ fun ExpandableCardPreview() {
         deviceModel = DeviceModel(
             "Test",
             "Test",
-            -2,
-            10,
-            1,
-            ByteArray(10),
-            listOf(Pair("Manufacturer Specific Data", "0xabcdef"), Pair("Another", "0x123456"))
+            -2
         )
     )
 }

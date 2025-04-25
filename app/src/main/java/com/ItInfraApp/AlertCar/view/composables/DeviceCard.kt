@@ -36,12 +36,6 @@ fun DeviceCard(deviceModel: DeviceModel) {
             Column() {
 
                 Row() {
-//                    Icon(
-//                        painter = painterResource(id = R.drawable.baseline_bluetooth_24),
-//                        contentDescription = "Bluetooth Icon",
-//                        modifier = Modifier.offset(y = 4.dp)
-//
-//                    )
                     Text(
                         text = deviceModel.name,
                         style = MaterialTheme.typography.titleSmall,
@@ -75,11 +69,8 @@ fun DefaultPreview() {
             deviceModel = DeviceModel(
                 "Test",
                 "Test",
-                2,
-                10,
-                1,
-                ByteArray(10),
-                listOf(Pair("Test", "Test")))
+                2
+            )
         )
     }
 }

@@ -6,6 +6,9 @@ import kotlinx.android.parcel.Parcelize
 
 @Parcelize
 data class FilteredScanResult (
-    val scanResult: ScanResult,
-    val filteredRssi: Int
+    val name: String,
+    val address: String,
+    val txPower: Int,
+    var filteredRssi: Int,
+    var distance: Double
 ) : Parcelable

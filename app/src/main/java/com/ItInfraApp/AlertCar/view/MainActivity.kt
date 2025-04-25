@@ -55,6 +55,7 @@ import com.airbnb.lottie.compose.animateLottieCompositionAsState
 import com.airbnb.lottie.compose.rememberLottieComposition
 import kotlinx.coroutines.delay
 import timber.log.Timber
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
 
@@ -81,6 +82,7 @@ class MainActivity : ComponentActivity() {
 
         Timber.d("Activity Created...")
 
+
         // Set the content to the ble scanner theme starting with the Scanning Screen
         setContent {
 //            BLEScannerTheme {
@@ -91,8 +93,22 @@ class MainActivity : ComponentActivity() {
 //                    ScanningScreen(viewModel)
 //                }
 //            }
+
             AlertCarTheme {
-                BeaconAlarmMainScreen(viewModel)
+                // 앱 시작 시 SplashScreen을 보여주고, 3초 후 메인 화면으로 전환
+                var showSplashScreen by remember { mutableStateOf(true) }
+
+                SplashScreen(onSplashEnded = { showSplashScreen = false })
+
+                if (!showSplashScreen) {
+                    // 서비스 시작
+                    val startIntent =
+                        Intent(LocalContext.current, BleService::class.java)
+                    startIntent.action =
+                        "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE"
+                    LocalContext.current.startForegroundService(startIntent)
+                    BeaconAlarmMainScreen(viewModel)
+                }
             }
         }
 
@@ -276,6 +292,8 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun BeaconAlarmMainScreen(viewModel: SharedViewModel) {
 
+        val scanResults = viewModel.scanResults.observeAsState(initial = emptyList())
+
         val context = LocalContext.current
         // 폰트 리소스를 FontFamily 객체로 로드
         val MyFontFamily = FontFamily(
@@ -302,9 +320,18 @@ class MainActivity : ComponentActivity() {
             restartOnPlay = false
         )
 
+        val onComposition by rememberLottieComposition(
+            LottieCompositionSpec.RawRes(R.raw.power_button_on)
+        )
+
+        val onProgress by animateLottieCompositionAsState(
+            composition = onComposition,
+            iterations = LottieConstants.IterateForever,
+            isPlaying = true,
+            restartOnPlay = false
+        )
+
         var isScanning: Boolean by remember { mutableStateOf(false) }
-
-
 
         Surface(
             modifier = Modifier
@@ -336,20 +363,29 @@ class MainActivity : ComponentActivity() {
                         )
                     )
 
-                    Image(
-                        painter = painterResource(android.R.drawable.ic_dialog_info),
-                        contentDescription = "image description",
-                        contentScale = ContentScale.None,
-                        colorFilter = ColorFilter.tint(Color(0xFF64748B)),
-                        modifier = Modifier
-                            .padding(0.83333.dp)
+//                    Image(
+//                        painter = painterResource(android.R.drawable.ic_dialog_info),
+//                        contentDescription = "image description",
+//                        contentScale = ContentScale.None,
+//                        colorFilter = ColorFilter.tint(Color(0xFF64748B)),
+//                        modifier = Modifier
+//                            .padding(0.83333.dp)
+//                    )
+
+                    LottieAnimation(
+                        composition = onComposition,
+                        progress = onProgress,
+                        Modifier
+                            .size(50.dp)
                     )
                 }
 
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
                     horizontalAlignment = Alignment.Start,
-                    modifier = Modifier.border(1.dp, Color(0xFFE0E0E0)).padding(bottom = 24.dp)
+                    modifier = Modifier
+                        .border(1.dp, Color(0xFFE0E0E0))
+                        .padding(bottom = 24.dp)
                         .fillMaxWidth()
                 ) {
                     Text(
@@ -373,39 +409,147 @@ class MainActivity : ComponentActivity() {
                     contentAlignment = Alignment.Center,
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    LottieAnimation(
-                        composition = composition,
-                        progress = progress,
-                        Modifier.clickable(
-                            interactionSource = interactionSource,
-                            indication = null, // 클릭 시 리플 효과 제거
-                            onClick = {
-                                if (isButtonEnabled) {
-                                    isScanning = !isScanning
 
-                                    if (isScanning) {
-                                        if (!isMyServiceRunning(BleService::class.java)) {
-                                            // 서비스 시작
-                                            val startIntent = Intent(context, BleService::class.java)
-                                            startIntent.action = "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE"
-                                            context.startForegroundService(startIntent)
-                                        }
-                                        currentAnimation = R.raw.power_button_on
-                                        isPlaying = true
-                                    } else {
-                                        // 서비스 정지
-                                        val stopIntent = Intent(context, BleService::class.java)
-                                        context.stopService(stopIntent)
-                                        currentAnimation = R.raw.power_button
-                                        isPlaying = false
-                                    }
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
 
-                                    // 버튼을 다시 활성화
-                                    isButtonEnabled = true
+
+
+                        if (scanResults.value.isNotEmpty()) {
+                            // 비콘이 감지된 경우
+                            when (scanResults.value.first().distance) {
+                                in 0.0..2.0 -> {
+                                    // 2m 이내
+                                    Image(
+                                        painter = painterResource(R.drawable.ic__round_warning),
+                                        contentDescription = "image description",
+                                        contentScale = ContentScale.None,
+                                        colorFilter = ColorFilter.tint(Color(0xFFB4070B)),
+                                        modifier = Modifier
+                                            .padding(0.83333.dp)
+                                    )
+
+                                    Text(
+                                        text = "차량이 아주 가까이 있습니다. 조심하십시오",
+                                        style = TextStyle(
+                                            fontSize = 18.sp,
+                                            lineHeight = 18.sp,
+                                            fontFamily = FontFamily(Font(R.font.inter)),
+                                            fontWeight = FontWeight(600),
+                                            color = Color(0xFF1E293B),
+                                        ),
+                                        modifier = Modifier
+                                            .padding(start = 24.dp, top = 24.dp, end = 24.dp)
+                                    )
+                                }
+
+                                in 2.0..4.0 -> {
+                                    // 2m 초과 4m 이내
+                                    Image(
+                                        painter = painterResource(R.drawable.ic__round_warning),
+                                        contentDescription = "image description",
+                                        contentScale = ContentScale.None,
+                                        colorFilter = ColorFilter.tint(Color(0xFFF8730A)),
+                                        modifier = Modifier
+                                            .padding(0.83333.dp)
+                                    )
+
+                                    Text(
+                                        text = "차량이 가까이 있습니다. 조심하십시오",
+                                        style = TextStyle(
+                                            fontSize = 18.sp,
+                                            lineHeight = 18.sp,
+                                            fontFamily = FontFamily(Font(R.font.inter)),
+                                            fontWeight = FontWeight(600),
+                                            color = Color(0xFF1E293B),
+                                        ),
+                                        modifier = Modifier
+                                            .padding(start = 24.dp, top = 24.dp, end = 24.dp)
+                                    )
+                                }
+
+                                else -> {
+                                    // 4m 초과
+                                    Image(
+                                        painter = painterResource(R.drawable.ic__round_warning),
+                                        contentDescription = "image description",
+                                        contentScale = ContentScale.None,
+                                        colorFilter = ColorFilter.tint(Color(0xFF23B14D)),
+                                        modifier = Modifier
+                                            .padding(0.83333.dp)
+                                    )
+
+                                    Text(
+                                        text = "차량이 근처에 있습니다. 조심하십시오",
+                                        style = TextStyle(
+                                            fontSize = 18.sp,
+                                            lineHeight = 18.sp,
+                                            fontFamily = FontFamily(Font(R.font.inter)),
+                                            fontWeight = FontWeight(600),
+                                            color = Color(0xFF1E293B),
+                                        ),
+                                        modifier = Modifier
+                                            .padding(start = 24.dp, top = 24.dp, end = 24.dp)
+                                    )
                                 }
                             }
-                        ).size(400.dp)
-                    )
+                        } else {
+                            // 비콘이 감지되지 않은 경우
+                            Text(
+                                text = "주변에 차량이 감지된게 없습니다.",
+                                style = TextStyle(
+                                    fontSize = 18.sp,
+                                    lineHeight = 18.sp,
+                                    fontFamily = FontFamily(Font(R.font.inter)),
+                                    fontWeight = FontWeight(600),
+                                    color = Color(0xFF1E293B),
+                                ),
+                                modifier = Modifier
+                                    .padding(start = 24.dp, top = 24.dp, end = 24.dp)
+                            )
+
+                        }
+                    }
+
+//                    LottieAnimation(
+//                        composition = composition,
+//                        progress = progress,
+//                        Modifier
+//                            .clickable(
+//                                interactionSource = interactionSource,
+//                                indication = null, // 클릭 시 리플 효과 제거
+//                                onClick = {
+//                                    if (isButtonEnabled) {
+//                                        isScanning = !isScanning
+//
+//                                        if (isScanning) {
+//                                            if (!isMyServiceRunning(BleService::class.java)) {
+//                                                // 서비스 시작
+//                                                val startIntent =
+//                                                    Intent(context, BleService::class.java)
+//                                                startIntent.action =
+//                                                    "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE"
+//                                                context.startForegroundService(startIntent)
+//                                            }
+//                                            currentAnimation = R.raw.power_button_on
+//                                            isPlaying = true
+//                                        } else {
+//                                            // 서비스 정지
+//                                            val stopIntent = Intent(context, BleService::class.java)
+//                                            context.stopService(stopIntent)
+//                                            currentAnimation = R.raw.power_button
+//                                            isPlaying = false
+//                                        }
+//
+//                                        // 버튼을 다시 활성화
+//                                        isButtonEnabled = true
+//                                    }
+//                                }
+//                            )
+//                            .size(400.dp)
+//                    )
                 }
             }
 
@@ -417,6 +561,7 @@ class MainActivity : ComponentActivity() {
 
         val scanResults = viewModel.scanResults.observeAsState(initial = emptyList())
         val resultRssi = viewModel.scanResults.value?.firstOrNull()?.filteredRssi ?: 0
+        val resultDistance = viewModel.scanResults.value?.firstOrNull()?.distance ?: 0.0
 
 
 
@@ -434,17 +579,29 @@ class MainActivity : ComponentActivity() {
                     .padding(start = 24.dp, end = 24.dp)
             )
         } else {
-            val rssi = resultRssi
             // 리스트가 비어 있지 않을 때의 처리 로직
             // 비콘 상태를 표시하는 코드
-            Text("rssi: $rssi dBm",
-                    style = TextStyle(
+//            Text("rssi: $rssi dBm",
+//                style = TextStyle(
+//                fontSize = 14.sp,
+//                lineHeight = 20.sp,
+//                fontFamily = FontFamily(Font(R.font.inter)),
+//                fontWeight = FontWeight(400),
+//                color = Color(0xFF334155),
+//
+//                ),
+//                modifier = Modifier
+//                    .padding(start = 24.dp, end = 24.dp)
+//            )
+            // 비콘의 거리를 표시하는 코드
+            Text(
+                text = "거리: ${(resultDistance * 10.0 ).roundToInt() / 10.0 }m",
+                style = TextStyle(
                     fontSize = 14.sp,
-                lineHeight = 20.sp,
-                fontFamily = FontFamily(Font(R.font.inter)),
-                fontWeight = FontWeight(400),
-                color = Color(0xFF334155),
-
+                    lineHeight = 20.sp,
+                    fontFamily = FontFamily(Font(R.font.inter)),
+                    fontWeight = FontWeight(400),
+                    color = Color(0xFF334155),
                 ),
                 modifier = Modifier
                     .padding(start = 24.dp, end = 24.dp)
@@ -453,32 +610,9 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun AlarmSettings() {
-        // 알람 설정을 위한 UI
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("알람 활성화")
-//        Switch(
-//            checked = /* 알람 상태 */,
-//            onCheckedChange = { /* 알람 상태 변경 처리 */ }
-//        )
-        }
-    }
-
-    @Composable
-    fun RecentAlarms() {
-        // 최근 알람 목록을 표시하는 코드
-        Column {
-            Text("최근 알람", style = MaterialTheme.typography.bodyMedium)
-            // 여기에 최근 알람 목록을 동적으로 추가...
-        }
-    }
-
-    @Composable
     fun SplashScreen(onSplashEnded: () -> Unit) {
         LaunchedEffect(key1 = true) {
-            delay(3000) // 3초 대기
+            delay(1500) // 3초 대기
             onSplashEnded() // 3초 후 콜백 함수 호출
         }
 
@@ -491,14 +625,6 @@ class MainActivity : ComponentActivity() {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // TODO: 로고 이미지 추가 및 로딩 중 표시
-                // 로고 이미지 추가
-                Image(
-                    painter = painterResource(id = R.drawable.beacon),
-                    contentDescription = "Beacon Logo",
-                    modifier = Modifier.height(100.dp)
-                )
-
                 CircularProgressIndicator(
                     strokeWidth = 5.dp,
                     color = MaterialTheme.colorScheme.primary,
