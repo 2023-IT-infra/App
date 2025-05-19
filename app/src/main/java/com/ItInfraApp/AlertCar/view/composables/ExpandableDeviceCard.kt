@@ -40,8 +40,6 @@ import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material.ContentAlpha
 import com.ItInfraApp.AlertCar.R
 import com.ItInfraApp.AlertCar.model.DeviceModel
-import com.ItInfraApp.AlertCar.model.ScanResultAdapter
-import com.ItInfraApp.AlertCar.controller.utils.toHex
 
 /**
  * Composable function for rendering an expandable device card.

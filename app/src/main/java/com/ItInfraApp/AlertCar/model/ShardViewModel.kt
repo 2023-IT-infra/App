@@ -1,6 +1,5 @@
 package com.ItInfraApp.AlertCar.model
 
-import android.bluetooth.le.ScanResult
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel

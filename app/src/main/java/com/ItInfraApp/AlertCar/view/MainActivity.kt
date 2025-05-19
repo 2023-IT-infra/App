@@ -13,11 +13,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
@@ -32,10 +33,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.ViewModelProvider
 import com.ItInfraApp.AlertCar.BuildConfig
@@ -46,6 +47,8 @@ import com.ItInfraApp.AlertCar.model.BleService
 import com.ItInfraApp.AlertCar.model.FilteredScanResult
 import com.ItInfraApp.AlertCar.model.SharedViewModel
 import com.ItInfraApp.AlertCar.view.composables.DeviceList
+import com.ItInfraApp.AlertCar.view.composables.MainDropDownMenuButton
+import com.ItInfraApp.AlertCar.view.composables.model.MenuOption
 import com.ItInfraApp.AlertCar.view.composables.ScanButton
 import com.ItInfraApp.AlertCar.view.theme.AlertCarTheme
 import com.airbnb.lottie.compose.LottieAnimation
@@ -55,7 +58,6 @@ import com.airbnb.lottie.compose.animateLottieCompositionAsState
 import com.airbnb.lottie.compose.rememberLottieComposition
 import kotlinx.coroutines.delay
 import timber.log.Timber
-import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
 
@@ -85,14 +87,6 @@ class MainActivity : ComponentActivity() {
 
         // Set the content to the ble scanner theme starting with the Scanning Screen
         setContent {
-//            BLEScannerTheme {
-//                Surface(
-//                    modifier = Modifier.fillMaxSize(),
-//                    color = MaterialTheme.colorScheme.background
-//                ) {
-//                    ScanningScreen(viewModel)
-//                }
-//            }
 
             AlertCarTheme {
                 // 앱 시작 시 SplashScreen을 보여주고, 3초 후 메인 화면으로 전환
@@ -140,11 +134,16 @@ class MainActivity : ComponentActivity() {
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
 
         // 빌드 번호 확인
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            multiplePermissionHandler.checkNotificationPermissions()
             // Check for BLE Permissions
             multiplePermissionHandler.checkBlePermissions(bluetoothAdapter)
             multiplePermissionHandler.checkInternetPermissions()
-        }  else {
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Check for BLE Permissions
+            multiplePermissionHandler.checkBlePermissions(bluetoothAdapter)
+            multiplePermissionHandler.checkInternetPermissions()
+        } else {
             // Check for Internet Permissions
             multiplePermissionHandler.checkLocationPermissions()
             multiplePermissionHandler.checkInternetPermissions()
@@ -176,6 +175,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
 
     // Scanning Screen Composable
     @OptIn(ExperimentalMaterial3Api::class)
@@ -296,16 +296,8 @@ class MainActivity : ComponentActivity() {
 
         val context = LocalContext.current
         // 폰트 리소스를 FontFamily 객체로 로드
-        val MyFontFamily = FontFamily(
-            Font(R.font.inter, FontWeight.Normal)
-            // 필요에 따라 다른 스타일의 폰트도 추가할 수 있습니다.
-        )
 
-        var isButtonEnabled by remember { mutableStateOf(true) }
-
-        var isPlaying by remember { mutableStateOf(false) }
-
-        var currentAnimation by remember { mutableStateOf(R.raw.power_button) }
+        var currentAnimation by remember { mutableStateOf(R.raw.power_button_on) }
 
         val composition by rememberLottieComposition(
             LottieCompositionSpec.RawRes(currentAnimation)
@@ -320,18 +312,14 @@ class MainActivity : ComponentActivity() {
             restartOnPlay = false
         )
 
-        val onComposition by rememberLottieComposition(
-            LottieCompositionSpec.RawRes(R.raw.power_button_on)
-        )
+        val isScanning: Boolean by remember { mutableStateOf(true) }
 
-        val onProgress by animateLottieCompositionAsState(
-            composition = onComposition,
-            iterations = LottieConstants.IterateForever,
-            isPlaying = true,
-            restartOnPlay = false
+        // 메뉴 종류
+        val menuOptions = listOf(
+            MenuOption("개발자 로그", Icons.Default.Settings) {
+                //context.startActivity(Intent(context,))
+            }
         )
-
-        var isScanning: Boolean by remember { mutableStateOf(false) }
 
         Surface(
             modifier = Modifier
@@ -357,27 +345,49 @@ class MainActivity : ComponentActivity() {
                         style = TextStyle(
                             fontSize = 26.sp,
                             lineHeight = 30.sp,
-                            //fontFamily = MyFontFamily,
-                            //fontWeight = FontWeight.Normal,
                             color = Color(0xFF1E293B),
                         )
                     )
 
-//                    Image(
-//                        painter = painterResource(android.R.drawable.ic_dialog_info),
-//                        contentDescription = "image description",
-//                        contentScale = ContentScale.None,
-//                        colorFilter = ColorFilter.tint(Color(0xFF64748B)),
-//                        modifier = Modifier
-//                            .padding(0.83333.dp)
-//                    )
+                    Box(
+                        modifier = Modifier
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null
+                            ) {
+                                // 클릭할 때마다:
+                                //  a) 이미 실행 중이면 멈추고
+                                //  b) 다시 시작
+                                val svcIntent = Intent(context, BleService::class.java)
+                                    .apply { action = "com.ItInfraApp.AlertCar.ACTION_START_FOREGROUND_SERVICE" }
 
-                    LottieAnimation(
-                        composition = onComposition,
-                        progress = onProgress,
-                        Modifier
-                            .size(50.dp)
-                    )
+                                // 1) 서비스 정지
+                                context.stopService(svcIntent)
+                                // 2) 서비스 재시작
+                                context.startForegroundService(svcIntent)
+
+                                // 애니메이션 리소스 교체
+                                currentAnimation =
+                                    if (isScanning) R.raw.power_button_on
+                                    else R.raw.power_button
+                            }
+                            .size(65.dp) //원하는 크기로 조정
+                            .fillMaxWidth()
+                        ,
+                        contentAlignment = Alignment.TopStart
+                    ) {
+                        LottieAnimation(
+                            composition = composition,
+                            progress = { progress },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    // 2) 중간 가변 공간
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    MainDropDownMenuButton(options = menuOptions)
+
                 }
 
                 Column(
@@ -415,13 +425,11 @@ class MainActivity : ComponentActivity() {
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
 
-
-
                         if (scanResults.value.isNotEmpty()) {
                             // 비콘이 감지된 경우
                             when (scanResults.value.first().distance) {
-                                in 0.0..2.0 -> {
-                                    // 2m 이내
+                                in 0.0..1.0 -> {
+                                    // 1m 이내
                                     Image(
                                         painter = painterResource(R.drawable.ic__round_warning),
                                         contentDescription = "image description",
@@ -439,14 +447,15 @@ class MainActivity : ComponentActivity() {
                                             fontFamily = FontFamily(Font(R.font.inter)),
                                             fontWeight = FontWeight(600),
                                             color = Color(0xFF1E293B),
+                                            textAlign = TextAlign.Center
                                         ),
                                         modifier = Modifier
                                             .padding(start = 24.dp, top = 24.dp, end = 24.dp)
                                     )
                                 }
 
-                                in 2.0..4.0 -> {
-                                    // 2m 초과 4m 이내
+                                in 1.0..5.0 -> {
+                                    // 1m 초과 5m 이내
                                     Image(
                                         painter = painterResource(R.drawable.ic__round_warning),
                                         contentDescription = "image description",
@@ -464,6 +473,7 @@ class MainActivity : ComponentActivity() {
                                             fontFamily = FontFamily(Font(R.font.inter)),
                                             fontWeight = FontWeight(600),
                                             color = Color(0xFF1E293B),
+                                            textAlign = TextAlign.Center
                                         ),
                                         modifier = Modifier
                                             .padding(start = 24.dp, top = 24.dp, end = 24.dp)
@@ -489,6 +499,7 @@ class MainActivity : ComponentActivity() {
                                             fontFamily = FontFamily(Font(R.font.inter)),
                                             fontWeight = FontWeight(600),
                                             color = Color(0xFF1E293B),
+                                            textAlign = TextAlign.Center
                                         ),
                                         modifier = Modifier
                                             .padding(start = 24.dp, top = 24.dp, end = 24.dp)
@@ -505,6 +516,7 @@ class MainActivity : ComponentActivity() {
                                     fontFamily = FontFamily(Font(R.font.inter)),
                                     fontWeight = FontWeight(600),
                                     color = Color(0xFF1E293B),
+                                    textAlign = TextAlign.Center
                                 ),
                                 modifier = Modifier
                                     .padding(start = 24.dp, top = 24.dp, end = 24.dp)
@@ -594,18 +606,18 @@ class MainActivity : ComponentActivity() {
 //                    .padding(start = 24.dp, end = 24.dp)
 //            )
             // 비콘의 거리를 표시하는 코드
-            Text(
-                text = "거리: ${(resultDistance * 10.0 ).roundToInt() / 10.0 }m",
-                style = TextStyle(
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    fontFamily = FontFamily(Font(R.font.inter)),
-                    fontWeight = FontWeight(400),
-                    color = Color(0xFF334155),
-                ),
-                modifier = Modifier
-                    .padding(start = 24.dp, end = 24.dp)
-            )
+//            Text(
+//                text = "거리: ${(resultDistance * 10.0 ).roundToInt() / 10.0 }m",
+//                style = TextStyle(
+//                    fontSize = 14.sp,
+//                    lineHeight = 20.sp,
+//                    fontFamily = FontFamily(Font(R.font.inter)),
+//                    fontWeight = FontWeight(400),
+//                    color = Color(0xFF334155),
+//                ),
+//                modifier = Modifier
+//                    .padding(start = 24.dp, end = 24.dp)
+//            )
         }
     }
 

@@ -7,9 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ItInfraApp.AlertCar.model.DeviceModel
-import com.ItInfraApp.AlertCar.model.ScanResultAdapter
 import com.ItInfraApp.AlertCar.view.theme.BLEScannerTheme
-import com.ItInfraApp.AlertCar.controller.utils.toHex
 
 /**
  * Composable function for rendering a device card.

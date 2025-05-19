@@ -156,4 +156,18 @@ class MultiplePermissionHandler(
             Timber.d("Permission check passed...")
         }
     }
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    fun checkNotificationPermissions() {
+        val permissionsStateNotification = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) != PackageManager.PERMISSION_GRANTED
+
+        if (permissionsStateNotification) {
+            multiplePermissionResultLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+        } else {
+            Timber.d("Permission check passed...")
+        }
+    }
 }

@@ -10,7 +10,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.ItInfraApp.AlertCar.controller.AdvParser
 import com.ItInfraApp.AlertCar.model.DeviceModel
 import com.ItInfraApp.AlertCar.model.SharedViewModel
 
