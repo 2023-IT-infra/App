@@ -1,8 +1,7 @@
 package com.ItInfraApp.AlertCar.model
 
-import android.bluetooth.le.ScanResult
 import android.os.Parcelable
-import kotlinx.android.parcel.Parcelize
+import kotlinx.parcelize.Parcelize
 
 @Parcelize
 data class FilteredScanResult (
@@ -10,5 +9,6 @@ data class FilteredScanResult (
     val address: String,
     val txPower: Int,
     var filteredRssi: Int,
-    var distance: Double
+    var distance: Double,
+    val firstSeen: Long
 ) : Parcelable

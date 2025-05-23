@@ -1,4 +1,4 @@
-package com.ItInfraApp.AlertCar.view.composables
+package com.ItInfraApp.AlertCar.view.composables.component
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button

@@ -1,7 +1,6 @@
-package com.ItInfraApp.AlertCar.view.composables
+package com.ItInfraApp.AlertCar.view.composables.component
 
 import android.annotation.SuppressLint
-import android.bluetooth.le.ScanResult
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import com.ItInfraApp.AlertCar.model.DeviceModel
 import com.ItInfraApp.AlertCar.model.SharedViewModel
 

@@ -117,14 +117,17 @@ fun AlertCarTheme(
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
+
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            dynamicLightColorScheme(context)
         }
-
-        darkTheme -> DarkColorPalette
-        else -> LightColorPalette
+        else -> lightColorScheme(
+            primary = Color(0xFF6750A4),
+            onPrimary = Color.White,
+            /* … 나머지 컬러 정의 … */
+        )
     }
     val view = LocalView.current
     if (!view.isInEditMode) {

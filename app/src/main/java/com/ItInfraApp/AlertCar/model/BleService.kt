@@ -182,6 +182,8 @@ class BleService : Service() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             super.onScanResult(callbackType, result)
+            Log.d(TAG, "onScanResult: ${result.device.name} - ${result.device.address}")
+            Log.d(TAG, "fjlteredScanResults: ${filteredScanResults.toString()}")
             val address = result.device.address
             val rawRssi = result.rssi.toDouble()
             if (address in macAddresses) {
@@ -200,13 +202,15 @@ class BleService : Service() {
                     existingResult.filteredRssi = finalFiltered.toInt()
                     existingResult.distance = 10.0.pow((txPowers[index] - finalFiltered) / 20.0)
                 } else {
+                    Log.d(TAG, "filteredScanResults add: $filteredScanResults")
                     filteredScanResults.add(
                         FilteredScanResult(
                             name = result.device.name ?: "Unknown",
                             address = address,
                             txPower = txPowers[index],
                             filteredRssi = finalFiltered.toInt(),
-                            distance = 10.0.pow((txPowers[index] - finalFiltered) / 20.0)
+                            distance = 10.0.pow((txPowers[index] - finalFiltered) / 20.0),
+                            firstSeen = System.currentTimeMillis()
                         )
                     )
                 }

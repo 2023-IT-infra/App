@@ -1,4 +1,4 @@
-package com.ItInfraApp.AlertCar.view.composables
+package com.ItInfraApp.AlertCar.view.composables.component
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
