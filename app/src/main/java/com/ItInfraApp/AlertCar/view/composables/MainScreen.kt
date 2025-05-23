@@ -9,12 +9,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.MaterialTheme
@@ -89,14 +93,15 @@ fun BeaconAlarmMainScreen(viewModel: SharedViewModel, navController: NavControll
 
     Surface(
         modifier = Modifier
-            .fillMaxSize(),
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.systemBars), // Apply system bar padding to the root
         color = MaterialTheme.colorScheme.background
     ){
         Column(
             modifier = Modifier
                 .fillMaxSize()
         ) {
-            Spacer(modifier = Modifier.height(22.dp))
+            // Spacer(modifier = Modifier.height(22.dp)) // Removed: Replaced by windowInsetsPadding on Surface
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.Start),

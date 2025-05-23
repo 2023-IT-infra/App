@@ -26,6 +26,7 @@
 
     <!-- Permissions for Foreground Service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
     <!-- Permissions for Vibration -->
     <uses-permission android:name="android.permission.VIBRATE" />

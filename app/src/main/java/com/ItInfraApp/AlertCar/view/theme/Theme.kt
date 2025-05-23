@@ -131,10 +131,24 @@ fun AlertCarTheme(
     }
     val view = LocalView.current
     if (!view.isInEditMode) {
+        val systemUiController = rememberSystemUiController()
+        val useDarkIcons = !isSystemInDarkTheme() // Or based on your theme logic for light/dark icons
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
+            // Make status bar transparent
+            systemUiController.setStatusBarColor(
+                color = Color.Transparent,
+                darkIcons = useDarkIcons
+            )
+            // Make navigation bar transparent
+            systemUiController.setNavigationBarColor(
+                color = Color.Transparent,
+                darkIcons = useDarkIcons // Or true if you want icons to be dark regardless of theme
+            )
+            // Ensure decor fits system windows is false (already done in MainActivity, but good for completeness)
+            // WindowCompat.setDecorFitsSystemWindows(window, false)
+            // Optional: Control light/dark status bar icons if not handled by systemUiController's darkIcons parameter
+            // WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = useDarkIcons
         }
     }
 

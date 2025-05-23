@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -49,8 +51,7 @@ fun ScanningScreen(viewModel: SharedViewModel) {
 
     Surface(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(10.dp),
+            .fillMaxSize(), // Removed padding(10.dp)
         color = MaterialTheme.colorScheme.background
     ) {
         // Scaffold as outermost on screen
@@ -97,13 +98,13 @@ fun ScanningScreen(viewModel: SharedViewModel) {
                 // Bottom Row containing two buttons
                 Row(
                     modifier = Modifier
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .navigationBarsPadding() // Added navigationBarsPadding
+                        .padding(vertical = 16.dp), // Added some vertical padding for aesthetics
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     // Clear Results Button
                     Button(
-                        modifier = Modifier
-                            .padding(top = 8.dp, bottom = 24.dp),
                         onClick = { viewModel.clearScanResults() },
                         content = {
                             Text("Clear Results")
@@ -145,14 +146,17 @@ private fun isMyServiceRunning(serviceClass: Class<*>): Boolean {
     return false
 }
 
+// Dummy implementations for placeholder functions to avoid compilation errors if they were the cause.
+// These should be reviewed for actual functionality if they are indeed used.
 private fun finishAllServices(serviceClass: Class<*>) {
-
+    // Actual implementation needed
 }
 
-fun getSystemService(activityService: String) {
-
+fun getSystemService(activityService: String): Any? {
+    // Actual implementation needed
+    return null
 }
 
 fun stopService(stopIntent: Intent) {
-
+    // Actual implementation needed
 }
